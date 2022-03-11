@@ -79,8 +79,8 @@ class CopyDetectEmbedding(nn.Module):
         if img_r is not None and img_q is not None:
             batch_size, seq_len_r, _ = emb_r.size() # shape: batch_size, seq_len, dim
             
-            segment_r = self.img_segment(torch.zeros(batch_size, seq_len_r)) #first image segment (similar to sentence A in NSP) 
-            segment_q = self.img_segment(torch.ones(batch_size, emb_q.size(1))) #second image segment (similar to sentence B in NSP)
+            segment_r = self.img_segment(torch.zeros((batch_size, seq_len_r), dtype = torch.int)) #first image segment (similar to sentence A in NSP) 
+            segment_q = self.img_segment(torch.ones((batch_size, emb_q.size(1)), dtype = torch.int)) #second image segment (similar to sentence B in NSP)
             
             emb_seg_r = emb_r + segment_r
             emb_seg_q = emb_q + segment_q
@@ -89,8 +89,9 @@ class CopyDetectEmbedding(nn.Module):
             sep_token = self.sep_token.expand(batch_size, -1, -1) + segment_r
             
             indices = torch.arange(batch_size)
-            shuffled_indices = torch.rand.perm(indices)
-            emb_r_shuffled = torch.gather(emb_seg_r, index = shuffled_indices)
+            shuffled_indices = torch.randperm(batch_size)
+
+            emb_r_shuffled = emb_seg_r[shuffled_indices]
             
             true_labels = torch.ones(batch_size)
             shuffled_labels = torch.eq(shuffled_indices, indices).long() #compare shuffled labels with indices, take care of boundary cases

@@ -65,7 +65,7 @@ class CDKFoldDataModule(BaseKFoldDataModule):
             if os.path.exists(dir) == False:
                 os.mkdir(dir)
         # download the data.
-        from multiprocessing import Pool, cpu_count, RLock
+        from multiprocessing import Pool, RLock
         from tqdm import tqdm
         
         urls = []
