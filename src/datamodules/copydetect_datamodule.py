@@ -22,7 +22,7 @@ from torch.utils.data.dataset import Subset
 from torchvision.io import read_image
 from torchvision.transforms import transforms
 
-from .kfold import BaseKFoldDataModule
+from ..utils.kfold import BaseKFoldDataModule
 from ..utils import download_and_unzip
 
 class CopyDetectDataset(Dataset):
@@ -38,21 +38,14 @@ class CopyDetectDataset(Dataset):
         return len(self.image_files)
     
     def __getitem__(self, index: int) -> torch.Tensor:
-        if self.pretrain:
-            if np.random.uniform() > 0.5:
-                isSim = torch.tensor(0)
-                aug_index = np.random.randint(low = 0, high = len(self.image_files))
-            else:
-                isSim = torch.tensor(1)
-                aug_index = index
-            return self.transforms(self.get_image(index)), self.aug(self.get_image(aug_index), isSim)
-        else:
-            return self.transforms(self.get_image(index))
-        
-    def get_image(self, index: int) -> torch.Tensor:
         image_path = self.image_files[index]
         image = Image.open(image_path)
-        return image
+
+        if self.pretrain:
+            return self.transforms(image), self.aug(image)
+        else:
+            return self.transforms(image)
+        
 
 @dataclass
 class CDKFoldDataModule(BaseKFoldDataModule):
