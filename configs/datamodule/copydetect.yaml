@@ -1,0 +1,13 @@
+_target_: src.datamodules.copydetect_datamodule.CDKFoldDataModule
+
+#training_dir: ${data_dir}/training/
+training_dir: ${data_dir}/trial/
+reference_dir: ${data_dir}/reference/
+query_dev_dir: ${data_dir}/query_dev/
+query_final_dir:  ${data_dir}/query_final/
+train_fold: None
+val_fold: None
+batch_size: 128
+num_workers: 8
+pin_memory: False
+num_folds: 5
