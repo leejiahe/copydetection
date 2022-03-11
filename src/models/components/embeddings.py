@@ -77,24 +77,24 @@ class CopyDetectEmbedding(nn.Module):
                 return emb_q
             
         if img_r is not None and img_q is not None:
-            batch_size, seq_len_r, _ = emb_r.size() # shape: batch_size, seq_len, dim
-            
-            segment_r = self.img_segment(torch.zeros((batch_size, seq_len_r), dtype = torch.int)) #first image segment (similar to sentence A in NSP) 
-            segment_q = self.img_segment(torch.ones((batch_size, emb_q.size(1)), dtype = torch.int)) #second image segment (similar to sentence B in NSP)
+            batch_size, seq_len_r, _ = emb_r.shape # shape: batch_size, seq_len, dim
+
+            segment_r = self.img_segment(torch.zeros((batch_size, seq_len_r), device = self.img_segment.weight.device, dtype = torch.int)) # First image segment (similar to sentence A in NSP) 
+            segment_q = self.img_segment(torch.ones((batch_size, emb_q.size(1)), device = self.img_segment.weight.device, dtype = torch.int)) # Second image segment (similar to sentence B in NSP)
             
             emb_seg_r = emb_r + segment_r
             emb_seg_q = emb_q + segment_q
             
-            cls_token = self.cls_token.expand(batch_size, -1, -1) + segment_r
+            # Added first segment (similar to NSP) to cls and sep tokens, there is not positional encoding for this two tokens
+            cls_token = self.cls_token.expand(batch_size, -1, -1) + segment_r 
             sep_token = self.sep_token.expand(batch_size, -1, -1) + segment_r
             
             indices = torch.arange(batch_size)
-            shuffled_indices = torch.randperm(batch_size)
-
-            emb_r_shuffled = emb_seg_r[shuffled_indices]
+            shuffled_indices = torch.randperm(batch_size) # Shuffled indices to create negative sample pairs within the batch
+            emb_r_shuffled = emb_seg_r[shuffled_indices] # Get the shuffled reference embeddings as negative samples
             
             true_labels = torch.ones(batch_size)
-            shuffled_labels = torch.eq(shuffled_indices, indices).long() #compare shuffled labels with indices, take care of boundary cases
+            shuffled_labels = torch.eq(shuffled_indices, indices).long() # Compare shuffled labels with indices, take care of boundary cases
             label_rq = torch.cat((true_labels, shuffled_labels))
             
             emb_rq_unshuffled = torch.cat((cls_token, emb_seg_r, sep_token, emb_seg_q), dim = 1)

@@ -1,4 +1,4 @@
-from tkinter import N
+#%%
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -109,7 +109,7 @@ class Config:
     projected_size = 512
     
     
-
+"""
 def main():
     #model = CopyDetectViT('google/vit-base-patch16-224')
     pretrained_model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
@@ -126,18 +126,25 @@ def main():
     
 if __name__ == "__main__":
     main()
+"""
 #%%
 import torch
+from transformers import ViTForImageClassification
 
-pretrained_model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+pretrained_model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224').to(device)
 train_dataset = CopyDetectDataset(image_dir = '/home/leejiahe/copydetection/data/query_dev/',
                                   image_size = pretrained_model.config.image_size, 
                                   pretrain = True)
-train_dataloader = DataLoader(train_dataset, batch_size = 2)
+train_dataloader = DataLoader(train_dataset, batch_size = 4)
 b = next(iter(train_dataloader))
 img_r, img_q = b[0], b[1]
+img_r, img_q = img_r.to(device), img_q.to(device)
+
 embedding = CopyDetectEmbedding(config = pretrained_model.config,
                                 vit_cls = pretrained_model.vit.embeddings.cls_token,
-                                pos_emb = pretrained_model.vit.embeddings.position_embeddings)
+                                pos_emb = pretrained_model.vit.embeddings.position_embeddings).to(device)
+r = embedding(img_r, img_q)
 
+print(r)
 # %%
