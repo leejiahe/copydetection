@@ -9,12 +9,14 @@ import torch.nn as nn
 from patch_embeddings import PatchEmbeddings
 
 class CopyDetectEmbedding(nn.Module):
-    def __init__(self, config, vit_cls):
+    def __init__(self, config, vit_cls, pos_emb):
         super().__init__()
-        self.vit_cls = vit_cls #Pretrained cls token from ViT model
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.sep_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.img_segment = nn.Embedding(2, config.hidden_size)
+        self.vit_cls = vit_cls #pretrained cls token from ViT model
+        self.position_embeddings = pos_emb #pretrained positional embedding from ViT model
+        
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) #cls token for the similar image prediction
+        self.sep_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) #sep token to separate sequence of the two images
+        self.img_segment = nn.Embedding(2, config.hidden_size) #image segment to differentiate image r and image q
 
         self.patch_embeddings = PatchEmbeddings(image_size = config.image_size,
                                                 patch_size = config.patch_size,
@@ -22,8 +24,6 @@ class CopyDetectEmbedding(nn.Module):
                                                 embed_dim = config.hidden_size)
         
         self.patch_size = config.patch_size
-        num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def get_pos_encoding(self, img, interpolate_pos_encoding = False):
@@ -37,7 +37,7 @@ class CopyDetectEmbedding(nn.Module):
         batch_size, num_channels, height, width = img.shape
         embeddings = self.patch_embeddings(img, interpolate_pos_encoding = interpolate_pos_encoding)
 
-        # add the [CLS] token to the embedded patch tokens
+        # add the pretrained [CLS] token to the embedded patch tokens
         vit_cls = self.vit_cls.expand(batch_size, -1, -1)
         embeddings = torch.cat((vit_cls, embeddings), dim = 1)
         
@@ -78,10 +78,9 @@ class CopyDetectEmbedding(nn.Module):
             
         if img_r is not None and img_q is not None:
             batch_size, seq_len_r, _ = emb_r.size() # shape: batch_size, seq_len, dim
-            _, seq_len_q, _ = emb_q.size() #shape: batch_size, seq_len, dim
             
             segment_r = self.img_segment(torch.zeros(batch_size, seq_len_r)) #first image segment (similar to sentence A in NSP) 
-            segment_q = self.img_segment(torch.ones(batch_size, seq_len_q)) #second image segment (similar to sentence B in NSP)
+            segment_q = self.img_segment(torch.ones(batch_size, emb_q.size(1))) #second image segment (similar to sentence B in NSP)
             
             emb_seg_r = emb_r + segment_r
             emb_seg_q = emb_q + segment_q
@@ -91,9 +90,11 @@ class CopyDetectEmbedding(nn.Module):
             
             indices = torch.arange(batch_size)
             shuffled_indices = torch.rand.perm(indices)
-            emb_r_shuffled = torch.gather(emb_r, index = shuffled_indices)
+            emb_r_shuffled = torch.gather(emb_seg_r, index = shuffled_indices)
             
-            label_rq = torch.cat((torch.ones(batch_size), torch.eq(shuffled_indices, indices).long()))
+            true_labels = torch.ones(batch_size)
+            shuffled_labels = torch.eq(shuffled_indices, indices).long() #compare shuffled labels with indices, take care of boundary cases
+            label_rq = torch.cat((true_labels, shuffled_labels))
             
             emb_rq_unshuffled = torch.cat((cls_token, emb_seg_r, sep_token, emb_seg_q), dim = 1)
             emb_rq_shuffled = torch.cat((cls_token, emb_r_shuffled, sep_token, emb_seg_q), dim = 1)

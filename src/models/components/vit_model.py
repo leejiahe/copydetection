@@ -24,7 +24,8 @@ class CopyDetectViT(nn.Module):
         pretrained_model = ViTForImageClassification.from_pretrained(pretrained_arch)
         self.model = pretrained_model.vit.encoder # We only use the encoder from ViT, we will use a different embedding and prediction head
         self.embedding = CopyDetectEmbedding(config = pretrained_model.config,
-                                             vit_cls = pretrained_model.vit.embeddings.cls_token)
+                                             vit_cls = pretrained_model.vit.embeddings.cls_token,
+                                             pos_emb = pretrained_model.vit.embeddings.position_embeddings)
         self.contrastive_head = ContrastiveHead()
         self.sim_img_head = SimImageHead()
         
