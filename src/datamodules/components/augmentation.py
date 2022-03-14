@@ -17,13 +17,17 @@ from augly.image.composition import BaseComposition
 
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-string.ascii_letters + string.digits + string.punctuation
+
+
 
 randomRGB = lambda: (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+
+string.ascii_letters + string.digits + string.punctuation
 letters = string.ascii_letters + string.digits + string.punctuation
 letters = [letter for letter in letters]
-
 randomText = lambda: (''.join(np.random.choice(letters, size = random.randint(2, 10), replace = False)))
+
+
 
 
 class N_Compositions(BaseComposition):
@@ -57,6 +61,8 @@ class N_Compositions(BaseComposition):
             image = transform(image, force = True, metadata = metadata, bboxes = bboxes, bbox_format = bbox_format)
         return image
     
+    
+    
 class OverlayRandomStripes(imaugs.OverlayStripes):
     def __init__(self, p: float = 1.0):
         super().__init__(p)
@@ -78,6 +84,8 @@ class OverlayRandomStripes(imaugs.OverlayStripes):
                                  metadata = metadata,
                                  bboxes = bboxes,
                                  bbox_format = bbox_format)
+  
+  
         
 class OverlayRandomEmoji(imaugs.OverlayEmoji):
     def __init__(self, p: float = 1.0,):
@@ -91,7 +99,8 @@ class OverlayRandomEmoji(imaugs.OverlayEmoji):
                         image: Image.Image,
                         metadata: Optional[List[Dict[str, Any]]] = None,
                         bboxes: Optional[List[Tuple]] = None,
-                        bbox_format: Optional[str] = None) -> Image.Image:
+                        bbox_format: Optional[str] = None,
+                        ) -> Image.Image:
         
         return F.overlay_emoji(image,
                                emoji_path = random.choice(self.emoji_paths),
@@ -102,6 +111,8 @@ class OverlayRandomEmoji(imaugs.OverlayEmoji):
                                metadata = metadata,
                                bboxes = bboxes,
                                bbox_format = bbox_format)
+        
+        
         
 class RandomPixelization(imaugs.Pixelization):
     def __init__(self, p: float = 1.0):
@@ -120,11 +131,12 @@ class RandomPixelization(imaugs.Pixelization):
                               bboxes = bboxes,
                               bbox_format = bbox_format)
 
+
+
 class EncodingRandomQuality(imaugs.EncodingQuality):
     def __init__(self, p: float = 1.0):
         super().__init__(p)
  
-
     def apply_transform(self,
                         image: Image.Image,
                         metadata: Optional[List[Dict[str, Any]]] = None,
@@ -133,21 +145,15 @@ class EncodingRandomQuality(imaugs.EncodingQuality):
                         ) -> Image.Image:
 
         return F.encoding_quality(image,
-                                  quality = random.randrange(25, 100),
+                                  quality = random.randrange(5, 50),
                                   metadata = metadata,
                                   bboxes = bboxes,
                                   bbox_format = bbox_format)
+        
+        
+        
 class OverlayText(BaseTransform):
-    def __init__(self,
-                 text: List[Union[int, List[int]]] = utils.DEFAULT_TEXT_INDICES,
-                 font_file: str = utils.FONT_PATH,
-                 font_size: float = 0.15,
-                 opacity: float = 1.0,
-                 color: Tuple[int, int, int] = utils.RED_RGB_COLOR,
-                 x_pos: float = 0.0,
-                 y_pos: float = 0.5,
-                 p: float = 1.0):
-
+    def __init__(self, p: float = 1.0):
         super().__init__(p)
         self.font_paths = [os.path.join(imaugs.utils.FONTS_DIR, f) for f in os.listdir(imaugs.utils.FONTS_DIR)]
         
@@ -161,39 +167,100 @@ class OverlayText(BaseTransform):
         return F.overlay_text(image,
                               text = randomText(),
                               font_file = random.choice(self.font_paths),
-                              font_size = random.uniform(0.05, 0.5),
-                              opacity = random.random(),
+                              font_size = random.uniform(0.1, 0.4),
+                              opacity = random.uniform(0.5, 1),
                               color = randomRGB(),
-                              x_pos = random.random(),
-                              y_pos = random.random(),
+                              x_pos = random.uniform(0, 0.6),
+                              y_pos = random.uniform(0. 0.6),
                               metadata = metadata,
                               bboxes = bboxes,
                               bbox_format = bbox_format)
         
         
- class OverlayTextRandom(object):
-    def __init__(self):
-        pass
-
-    def __call__(self, input_img):
         
-        text = []
-        text_list = range(1000)
-        width = random.randint(5,10)
-        for _ in range(random.randint(1,3)):
-            text.append(random.sample(text_list, width))
+class Saturation(BaseTransform):
+    def __init__(self, p: float = 1.0):
+        super().__init__(p)
+
+    def apply_transform(self,
+                        image: Image.Image,
+                        metadata: Optional[List[Dict[str, Any]]] = None,
+                        bboxes: Optional[List[Tuple]] = None,
+                        bbox_format: Optional[str] = None,
+                        ) -> Image.Image:
+
+        return F.saturation(image,
+                            factor = random.uniform(2, 5),
+                            metadata = metadata,
+                            bboxes = bboxes,
+                            bbox_format = bbox_format)
         
-        text_size = random.uniform(0.1, 0.4)
-            
-        aug = imaugs.OverlayText(
-            text=text,
-            opacity=random.uniform(0.5, 1.0),
-            font_size=random.uniform(0.1, 0.4),
-            color=random_RGB(),
-            x_pos=random.randint(0, 60) * 0.01,
-            y_pos=random.randint(0, 60) * 0.01,
-        )
+        
+        
+class ApplyPILFilter(BaseTransform):
+    def __init__(self, p: float = 1.0):
+        self.filter_types = [ImageFilter.BLUR,
+                             ImageFilter.CONTOUR,
+                             ImageFilter.MaxFilter,
+                             ImageFilter.UnsharpMask,
+                             ImageFilter.EDGE_ENHANCE,
+                             ImageFilter.EDGE_ENHANCE_MORE,
+                             ImageFilter.SHARPEN,
+                             ImageFilter.SMOOTH_MORE]
 
-        result_img = aug(input_img)
+        super().__init__(p)
 
-        return result_img
+    def apply_transform(self,
+                        image: Image.Image,
+                        metadata: Optional[List[Dict[str, Any]]] = None,
+                        bboxes: Optional[List[Tuple]] = None,
+                        bbox_format: Optional[str] = None,
+                        ) -> Image.Image:
+
+        return F.apply_pil_filter(image,
+                                  filter_type = np.random.choice(self.filter_types),
+                                  metadata = metadata,
+                                  bboxes = bboxes,
+                                  bbox_format = bbox_format)
+        
+        
+        
+class Brightness(BaseTransform):
+    def __init__(self, p: float = 1.0):
+        super().__init__(p)
+
+    def apply_transform(self,
+                        image: Image.Image,
+                        metadata: Optional[List[Dict[str, Any]]] = None,
+                        bboxes: Optional[List[Tuple]] = None,
+                        bbox_format: Optional[str] = None,
+                        ) -> Image.Image:
+
+        return F.brightness(image,
+                            factor = random.random(),
+                            metadata = metadata,
+                            bboxes = bboxes,
+                            bbox_format = bbox_format,)
+        
+        
+        
+class PerspectiveTransform(BaseTransform):
+    def __init__(self, p: float = 1.0):
+        super().__init__(p)
+
+
+    def apply_transform(self,
+                        image: Image.Image,
+                        metadata: Optional[List[Dict[str, Any]]] = None,
+                        bboxes: Optional[List[Tuple]] = None,
+                        bbox_format: Optional[str] = None,
+                        ) -> Image.Image:
+
+        return F.perspective_transform(image,
+                                       sigma = self.sigma,
+                                       dx = self.dx,
+                                       dy = self.dy,
+                                       seed = self.seed,
+                                       metadata = metadata,
+                                       bboxes = bboxes,
+                                       bbox_format = bbox_format)
