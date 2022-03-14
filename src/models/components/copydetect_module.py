@@ -5,49 +5,27 @@ from pytorch_lightning import LightningModule
 from torchmetrics import MaxMetric
 from torchmetrics.classification.accuracy import Accuracy
 
-from pytorch_metric_learning import losses
+from pytorch_metric_learning.losses import CrossBatchMemory, NTXentLoss
 from pytorch_metric_learning.utils import distributed as pml_dist
 
 
-class MNISTLitModule(LightningModule):
-    """
-    Example of LightningModule for MNIST classification.
-
-    A LightningModule organizes your PyTorch code into 5 sections:
-        - Computations (init).
-        - Train loop (training_step)
-        - Validation loop (validation_step)
-        - Test loop (test_step)
-        - Optimizers (configure_optimizers)
-
-    Read the docs:
-        https://pytorch-lightning.readthedocs.io/en/latest/common/lightning_module.html
-    """
-
-    def __init__(
-        self,
-        net: torch.nn.Module,
-        lr: float = 0.001,
-        weight_decay: float = 0.0005,
-    ):
+class CopyDetectModule(LightningModule):
+    def __init__(self):
         super().__init__()
-
-        # this line allows to access init params with 'self.hparams' attribute
-        # it also ensures init params will be stored in ckpt
+        # To access init params with 'self.hparams' attribute
         self.save_hyperparameters(logger=False)
 
-        self.net = net
+        # Cross batch memory contrastive loss and binary cross entropy loss for similar image pair
+        #! embedding size
+        self.xbm_contrastive_loss = CrossBatchMemory(NTXentLoss(self.hparams.temperature),
+                                                embedding_size = self.hparams.embedding_size,
+                                                memory_size = self.hparams.memory_size)
+        self.sim_img_bce_loss = torch.nn.BCEWithLogitsLoss()
 
-        # loss function
-        self.criterion = torch.nn.CrossEntropyLoss()
-
-        # use separate metric instance for train, val and test step
-        # to ensure a proper reduction over the epoch
-        self.train_acc = Accuracy()
-        self.val_acc = Accuracy()
-        self.test_acc = Accuracy()
-
-        # for logging best so far validation accuracy
+        # Separate metric instance for train, val and test step to ensure a proper reduction over the epoch
+        self.train_acc, self.val_acc, self.test_acc = Accuracy(), Accuracy(), Accuracy()
+        
+        # For logging best validation accuracy
         self.val_acc_best = MaxMetric()
 
     def forward(self, x: torch.Tensor):
@@ -112,12 +90,6 @@ class MNISTLitModule(LightningModule):
         self.val_acc.reset()
 
     def configure_optimizers(self):
-        """Choose what optimizers and learning-rate schedulers to use in your optimization.
-        Normally you'd need one. But in the case of GANs or similar you might have multiple.
-
-        See examples here:
-            https://pytorch-lightning.readthedocs.io/en/latest/common/lightning_module.html#configure-optimizers
-        """
         return torch.optim.Adam(
             params=self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay
         )
