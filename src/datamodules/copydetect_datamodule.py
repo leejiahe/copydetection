@@ -1,13 +1,3 @@
-"""
-{Description}
-
-http://www.apache.org/licenses/LICENSE-2.0
-"""
-
-__author__ = 'Lee Jiahe'
-__credits__ = ['']
-__version__ = '0.0.1'
-
 import os
 import numpy as np
 from PIL import Image
@@ -21,18 +11,55 @@ from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Subset
 from torchvision.io import read_image
 from torchvision.transforms import transforms
+import augly.image as imaugs
 
 from ..utils.kfold import BaseKFoldDataModule
 from ..utils import download_and_unzip
 
+from components.augmentation import *
+
 class CopyDetectDataset(Dataset):
-    def __init__(self, image_dir: str, pretrain: bool = False) -> None:
+    def __init__(self,
+                 image_dir: str,
+                 n_upper: int,
+                 n_lower: int = 1,
+                 training_image_dir: str = None,
+                 pretrain: bool = False):
+        
         assert(os.path.exists(image_dir))
         self.image_files = [os.path.join(image_dir, f) for f in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, f))]
         self.pretrain = pretrain
-        self.transforms = transforms.Compose([transforms.ToTensor(),
-                                              transforms.Normalize((0.1307,), (0.3081,))])
-        self.aug = self.transforms
+        
+        if pretrain:
+            transforms_list = [OverlayRandomStripes(),
+                               OverlayRandomEmoji(),
+                               EncodingRandomQuality(),
+                               MemeRandomFormat(),
+                               OverlayRandomText(),
+                               RandomSaturation(),
+                               ApplyRandomPILFilter(),
+                               OverlayOntoRandomBackgroundImage(training_image_dir),
+                               OverlayOntoRandomForegroundImage(training_image_dir),
+                               RandomShufflePixels(),
+                               OverlayOntoRandomScreenshot(),
+                               RandomPadSquare(),
+                               ConvertRandomColor(),
+                               RandomCropping(),
+                               imaugs.RandomAspectRatio(),
+                               imaugs.RandomPixelization(0, 0.7),
+                               imaugs.RandomBlur(2, 10),
+                               imaugs.RandomBrightness(0.1, 1),
+                               imaugs.RandomRotation(-90, 90),
+                               imaugs.Grayscale(),
+                               imaugs.PerspectiveTransform(),
+                               imaugs.VFlip(),
+                               imaugs.HFlip()]
+            
+            self.aug = N_Compositions(transforms_list, n_upper = n_upper, n_lower = n_lower)
+
+        self.trfm = transforms.Compose([transforms.ToTensor(),
+                                        transforms.Resize((224, 224)),
+                                        transforms.Normalize(IMAGENET_MEAN, IMAGENET_SDEV)])
         
     def __len__(self) -> int:
         return len(self.image_files)
@@ -42,9 +69,9 @@ class CopyDetectDataset(Dataset):
         image = Image.open(image_path)
 
         if self.pretrain:
-            return self.transforms(image), self.aug(image)
+            return self.trfm(image), self.trfm(self.aug(image))
         else:
-            return self.transforms(image)
+            return self.trfm(image)
         
 
 @dataclass
