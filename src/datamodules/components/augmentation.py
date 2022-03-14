@@ -26,9 +26,7 @@ string.ascii_letters + string.digits + string.punctuation
 letters = string.ascii_letters + string.digits + string.punctuation
 letters = [letter for letter in letters]
 randomText = lambda: (''.join(np.random.choice(letters, size = random.randint(2, 10), replace = False)))
-
-
-
+SEED = 23
 
 class N_Compositions(BaseComposition):
     def __init__(self,
@@ -171,7 +169,7 @@ class OverlayText(BaseTransform):
                               opacity = random.uniform(0.5, 1),
                               color = randomRGB(),
                               x_pos = random.uniform(0, 0.6),
-                              y_pos = random.uniform(0. 0.6),
+                              y_pos = random.uniform(0, 0.6),
                               metadata = metadata,
                               bboxes = bboxes,
                               bbox_format = bbox_format)
@@ -244,10 +242,33 @@ class Brightness(BaseTransform):
         
         
         
-class PerspectiveTransform(BaseTransform):
+class OverlayOntoBackgroundImage(BaseTransform):
+    def __init__(self, background_image_dir: str, p: float = 1.0,):
+        super().__init__(p)
+        self.background_images = [os.path.join(background_image_dir, image_path) for image_path in os.path.listdir(background_image_dir)]
+        
+    def apply_transform(self, image: Image.Image,
+                        metadata: Optional[List[Dict[str, Any]]] = None,
+                        bboxes: Optional[List[Tuple]] = None,
+                        bbox_format: Optional[str] = None,
+                        ) -> Image.Image:
+
+        return F.overlay_onto_background_image(image,
+                                               background_image = np.random.choice(self.background_images),
+                                               opacity = random.uniform(0.8, 1),
+                                               overlay_size = random.uniform(0.3, 0.6),
+                                               x_pos = random.uniform(0, 0.4),
+                                               y_pos = random.uniform(0, 0.4),
+                                               scale_bg = False,
+                                               metadata = metadata,
+                                               bboxes = bboxes,
+                                               bbox_format = bbox_format)
+
+
+
+class ShufflePixels(BaseTransform):
     def __init__(self, p: float = 1.0):
         super().__init__(p)
-
 
     def apply_transform(self,
                         image: Image.Image,
@@ -256,11 +277,52 @@ class PerspectiveTransform(BaseTransform):
                         bbox_format: Optional[str] = None,
                         ) -> Image.Image:
 
-        return F.perspective_transform(image,
-                                       sigma = self.sigma,
-                                       dx = self.dx,
-                                       dy = self.dy,
-                                       seed = self.seed,
-                                       metadata = metadata,
-                                       bboxes = bboxes,
-                                       bbox_format = bbox_format)
+        return F.shuffle_pixels(image,
+                                factor = random.uniform(0.1, 0.3),
+                                seed = SEED,
+                                metadata = metadata,
+                                bboxes = bboxes,
+                                bbox_format = bbox_format)
+        
+
+class OverlayOntoScreenshot(BaseTransform):
+    def __init__(self, p: float = 1.0):
+        super().__init__(p)
+        self.template_filepath = augly.utils.SCREENSHOT_TEMPLATES_DIR
+        self.template_bboxes_filepath = augly.utils.BBOXES_PATH
+
+    def apply_transform(self,
+                        image: Image.Image,
+                        metadata: Optional[List[Dict[str, Any]]] = None,
+                        bboxes: Optional[List[Tuple]] = None,
+                        bbox_format: Optional[str] = None,
+                        ) -> Image.Image:
+
+        return F.overlay_onto_screenshot(image,
+                                         template_filepath = [os.path.join(self.template_filepath, f) for f in os.listdir(self.template_filepath) if f.endswith(('png', 'jpg'))]
+                                         template_bboxes_filepath = self.template_bboxes_filepath,
+                                         max_image_size_pixels = None,
+                                         crop_src_to_fit = False,
+                                         resize_src_to_match_template = True,
+                                         metadata = metadata,
+                                         bboxes = bboxes,
+                                         bbox_format = bbox_format )
+        
+        
+        
+class PadSquare(BaseTransform):
+    def __init__(self, p: float = 1.0):
+        super().__init__(p)
+
+    def apply_transform(self,
+                        image: Image.Image,
+                        metadata: Optional[List[Dict[str, Any]]] = None,
+                        bboxes: Optional[List[Tuple]] = None,
+                        bbox_format: Optional[str] = None,
+                        ) -> Image.Image:
+
+        return F.pad_square(image,
+                            color = randomRGB(),
+                            metadata = metadata,
+                            bboxes = bboxes,
+                            bbox_format = bbox_format)
