@@ -197,11 +197,7 @@ class Saturation(BaseTransform):
         
 class ApplyPILFilter(BaseTransform):
     def __init__(self, p: float = 1.0):
-        self.filter_types = [ImageFilter.BLUR,
-                             ImageFilter.CONTOUR,
-                             ImageFilter.MaxFilter,
-                             ImageFilter.UnsharpMask,
-                             ImageFilter.EDGE_ENHANCE,
+        self.filter_types = [ImageFilter.CONTOUR,
                              ImageFilter.EDGE_ENHANCE_MORE,
                              ImageFilter.SHARPEN,
                              ImageFilter.SMOOTH_MORE]
@@ -299,7 +295,7 @@ class OverlayOntoScreenshot(BaseTransform):
                         ) -> Image.Image:
 
         return F.overlay_onto_screenshot(image,
-                                         template_filepath = [os.path.join(self.template_filepath, f) for f in os.listdir(self.template_filepath) if f.endswith(('png', 'jpg'))]
+                                         template_filepath = [os.path.join(self.template_filepath, f) for f in os.listdir(self.template_filepath) if f.endswith(('png', 'jpg'))],
                                          template_bboxes_filepath = self.template_bboxes_filepath,
                                          max_image_size_pixels = None,
                                          crop_src_to_fit = False,
@@ -326,3 +322,80 @@ class PadSquare(BaseTransform):
                             metadata = metadata,
                             bboxes = bboxes,
                             bbox_format = bbox_format)
+        
+        
+        
+class ConvertColor(BaseTransform):
+    def __init__(self,
+                 mode: Optional[str] = None,
+                 matrix: Union[None, 
+                               Tuple[float, float, float, float],
+                               Tuple[float,float,float,float,float,float,float,float,float,float,float,float],
+                               ] = None,
+                 dither: Optional[int] = None,
+                 palette: int = 0,
+                 colors: int = 256,
+                 p: float = 1.0):
+
+        super().__init__(p)
+
+    def apply_transform(self,
+                        image: Image.Image,
+                        metadata: Optional[List[Dict[str, Any]]] = None,
+                        bboxes: Optional[List[Tuple]] = None,
+                        bbox_format: Optional[str] = None,
+                        ) -> Image.Image:
+        
+        return F.convert_color(image,
+                               mode = None,
+                               matrix = None,
+                               dither = None,
+                               palette = 0,
+                               colors = random.randint(0, 256),
+                               metadata = metadata,
+                               bboxes = bboxes,
+                               bbox_format = bbox_format)
+        
+        
+class Crop(BaseTransform):
+    def __init__(self, p: float = 1.0):
+        super().__init__(p)
+
+    def apply_transform(self,
+                        image: Image.Image,
+                        metadata: Optional[List[Dict[str, Any]]] = None,
+                        bboxes: Optional[List[Tuple]] = None,
+                        bbox_format: Optional[str] = None,) -> Image.Image:
+
+        x1 = random.uniform(0, 0.4)
+        y1 = random.uniform(0, 0.4)
+        x2 = x1 + random.uniform(0, 0.4)
+        y2 = y1 + random.uniform(0, 0.4)
+
+        return F.crop(image,
+                      x1 = x1,
+                      y1 = y1,
+                      x2 = x2,
+                      y2 = y2,
+                      metadata = metadata,
+                      bboxes = bboxes,
+                      bbox_format = bbox_format)
+        
+        
+        
+class ChangeAspectRatio(BaseTransform):
+    def __init__(self, p: float = 1.0):
+        super().__init__(p)
+
+    def apply_transform(self,
+                        image: Image.Image,
+                        metadata: Optional[List[Dict[str, Any]]] = None,
+                        bboxes: Optional[List[Tuple]] = None,
+                        bbox_format: Optional[str] = None,
+                        ) -> Image.Image:
+
+        return F.change_aspect_ratio(image,
+                                     ratio = random.uniform(0.5, 2),
+                                     metadata = metadata,
+                                     bboxes = bboxes,
+                                     bbox_format = bbox_format)
