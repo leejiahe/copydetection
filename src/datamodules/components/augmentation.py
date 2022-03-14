@@ -20,13 +20,12 @@ SEED = 88
 
 randomRGB = lambda: (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
 
-string.ascii_letters + string.digits + string.punctuation
 letters = string.ascii_letters + string.digits + string.punctuation
 letters = [letter for letter in letters]
-randomText = lambda: (''.join(np.random.choice(letters, size = random.randint(2, 10), replace = False)))
+randomText = lambda: (''.join(np.random.choice(letters, size = random.randint(3, 10), replace = False)))
 
-IMAGENET_STD = (1,1,1)
-IMAGENET_MEAN = (1,1,1)
+IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_SDEV = [0.229, 0.224, 0.225]
 
 class N_Compositions(BaseComposition):
     def __init__(self,
@@ -55,7 +54,6 @@ class N_Compositions(BaseComposition):
         rand_n = np.random.randint(self.n_lower, self.n_upper)
         np.random.shuffle(self.transforms)
         transforms = np.random.choice(self.transforms, size = rand_n, replace = False, p = self.transform_probs)
-        print(transforms)
         for transform in transforms:
             image = transform(image, force = True, metadata = metadata, bboxes = bboxes, bbox_format = bbox_format)
         return image
@@ -78,7 +76,7 @@ class OverlayRandomStripes(imaugs.OverlayStripes):
                                  line_color = randomRGB(),
                                  line_angle = random.randrange(-90, 90),
                                  line_density = random.uniform(0.5, 1),
-                                 line_type = random.choice(imaugs.utils.SUPPORTED_LINE_TYPES),
+                                 line_type = random.choice(augly.utils.SUPPORTED_LINE_TYPES),
                                  line_opacity = random.uniform(0.5, 1),
                                  metadata = metadata,
                                  bboxes = bboxes,
@@ -112,10 +110,11 @@ class OverlayRandomEmoji(imaugs.OverlayEmoji):
                                bbox_format = bbox_format)
         
         
-        
-class RandomPixelization(imaugs.Pixelization):
+    
+class MemeRandomFormat(imaugs.MemeFormat):
     def __init__(self, p: float = 1.0):
         super().__init__(p)
+        self.font_paths = [os.path.join(augly.utils.FONTS_DIR, f) for f in os.listdir(augly.utils.FONTS_DIR) if f.endswith('ttf')]
 
     def apply_transform(self,
                         image: Image.Image,
@@ -124,12 +123,16 @@ class RandomPixelization(imaugs.Pixelization):
                         bbox_format: Optional[str] = None,
                         ) -> Image.Image:
 
-        return F.pixelization(image,
-                              ratio = random.uniform(0.3, 0.8),
-                              metadata = metadata,
-                              bboxes = bboxes,
-                              bbox_format = bbox_format)
-
+        return F.meme_format(image,
+                             text = randomText(),
+                             font_file = np.random.choice(self.font_paths),
+                             opacity = random.uniform(0.5, 1),
+                             text_color = randomRGB(),
+                             caption_height = random.uniform(50, 250),
+                             meme_bg_color = randomRGB(),
+                             metadata = metadata,
+                             bboxes = bboxes,
+                             bbox_format = bbox_format)
 
 
 class EncodingRandomQuality(imaugs.EncodingQuality):
@@ -154,7 +157,7 @@ class EncodingRandomQuality(imaugs.EncodingQuality):
 class OverlayRandomText(imaugs.OverlayText):
     def __init__(self, p: float = 1.0):
         super().__init__(p)
-        self.font_paths = [os.path.join(imaugs.utils.FONTS_DIR, f) for f in os.listdir(imaugs.utils.FONTS_DIR)]
+        self.font_paths = [os.path.join(augly.utils.FONTS_DIR, f) for f in os.listdir(augly.utils.FONTS_DIR) if f.endswith('ttf')]
         
     def apply_transform(self,
                         image: Image.Image,
@@ -162,10 +165,12 @@ class OverlayRandomText(imaugs.OverlayText):
                         bboxes: Optional[List[Tuple]] = None,
                         bbox_format: Optional[str] = None,
                         ) -> Image.Image:
-
+        text_indices = [[random.randint(0, 1000) for _ in range(random.randint(5, 10))] for _ in range(random.randint(1, 3))]
+        font_path = random.choice(self.font_paths)
+        
         return F.overlay_text(image,
-                              text = randomText(),
-                              font_file = random.choice(self.font_paths),
+                              text = text_indices,
+                              font_file = font_path,
                               font_size = random.uniform(0.1, 0.4),
                               opacity = random.uniform(0.5, 1),
                               color = randomRGB(),
@@ -219,30 +224,14 @@ class ApplyRandomPILFilter(imaugs.ApplyPILFilter):
                                   bbox_format = bbox_format)
         
         
-        
-class RandomBrightness(imaugs.Brightness):
-    def __init__(self, p: float = 1.0):
-        super().__init__(p)
 
-    def apply_transform(self,
-                        image: Image.Image,
-                        metadata: Optional[List[Dict[str, Any]]] = None,
-                        bboxes: Optional[List[Tuple]] = None,
-                        bbox_format: Optional[str] = None,
-                        ) -> Image.Image:
-
-        return F.brightness(image,
-                            factor = random.random(),
-                            metadata = metadata,
-                            bboxes = bboxes,
-                            bbox_format = bbox_format,)
         
         
         
 class OverlayOntoRandomBackgroundImage(imaugs.OverlayOntoBackgroundImage):
     def __init__(self, background_image_dir: str, p: float = 1.0,):
         super().__init__(p)
-        self.background_images = [os.path.join(background_image_dir, image_path) for image_path in os.path.listdir(background_image_dir)]
+        self.background_images = [os.path.join(background_image_dir, image_path) for image_path in os.listdir(background_image_dir)]
         
     def apply_transform(self, image: Image.Image,
                         metadata: Optional[List[Dict[str, Any]]] = None,
@@ -251,7 +240,7 @@ class OverlayOntoRandomBackgroundImage(imaugs.OverlayOntoBackgroundImage):
                         ) -> Image.Image:
 
         return F.overlay_onto_background_image(image,
-                                               background_image = np.random.choice(self.background_images),
+                                               background_image = Image.open(np.random.choice(self.background_images)),
                                                opacity = random.uniform(0.8, 1),
                                                overlay_size = random.uniform(0.3, 0.6),
                                                x_pos = random.uniform(0, 0.4),
@@ -263,10 +252,11 @@ class OverlayOntoRandomBackgroundImage(imaugs.OverlayOntoBackgroundImage):
 
 
 
+
 class OverlayOntoRandomForegroundImage(imaugs.OverlayOntoBackgroundImage):
     def __init__(self, foreground_image_dir: str, p: float = 1.0,):
         super().__init__(p)
-        self.foreground_images = [os.path.join(foreground_image_dir, image_path) for image_path in os.path.listdir(foreground_image_dir)]
+        self.foreground_images = [os.path.join(foreground_image_dir, image_path) for image_path in os.listdir(foreground_image_dir)]
         
     def apply_transform(self, image: Image.Image,
                         metadata: Optional[List[Dict[str, Any]]] = None,
@@ -274,8 +264,8 @@ class OverlayOntoRandomForegroundImage(imaugs.OverlayOntoBackgroundImage):
                         bbox_format: Optional[str] = None,
                         ) -> Image.Image:
 
-        return F.overlay_onto_background_image(np.random.choice(self.foreground_images),
-                                               background_image = image,
+        return F.overlay_onto_background_image(Image.open(np.random.choice(self.foreground_images)),
+                                               background_image = image, 
                                                opacity = random.uniform(0.8, 1),
                                                overlay_size = random.uniform(0.3, 0.6),
                                                x_pos = random.uniform(0, 0.4),
@@ -284,7 +274,6 @@ class OverlayOntoRandomForegroundImage(imaugs.OverlayOntoBackgroundImage):
                                                metadata = metadata,
                                                bboxes = bboxes,
                                                bbox_format = bbox_format)
-
 
 
 class RandomShufflePixels(imaugs.ShufflePixels):
@@ -319,8 +308,9 @@ class OverlayOntoRandomScreenshot(imaugs.OverlayOntoScreenshot):
                         bbox_format: Optional[str] = None,
                         ) -> Image.Image:
 
+        template_filepath = [os.path.join(self.template_filepath, f) for f in os.listdir(self.template_filepath) if f.endswith(('png', 'jpg'))]
         return F.overlay_onto_screenshot(image,
-                                         template_filepath = [os.path.join(self.template_filepath, f) for f in os.listdir(self.template_filepath) if f.endswith(('png', 'jpg'))],
+                                         template_filepath = np.random.choice(template_filepath),
                                          template_bboxes_filepath = self.template_bboxes_filepath,
                                          max_image_size_pixels = None,
                                          crop_src_to_fit = False,
@@ -381,58 +371,66 @@ class ConvertRandomColor(imaugs.ConvertColor):
                                bboxes = bboxes,
                                bbox_format = bbox_format)
         
-
-     
         
-class RandomChangeAspectRatio(imaugs.ChangeAspectRatio):
+        
+class RandomCropping(imaugs.Crop):
     def __init__(self, p: float = 1.0):
         super().__init__(p)
 
-    def apply_transform(self,
+    def apply_transform(self, 
                         image: Image.Image,
                         metadata: Optional[List[Dict[str, Any]]] = None,
                         bboxes: Optional[List[Tuple]] = None,
                         bbox_format: Optional[str] = None,
                         ) -> Image.Image:
+        
+        x1 = random.uniform(0, 0.4)
+        y1 = random.uniform(0, 0.4)
+        x2 = x1 + random.uniform(0, 0.4)
+        y2 = y1 + random.uniform(0, 0.4)
+        
+        return F.crop(image,
+                      x1 = x1,
+                      y1 = y1,
+                      x2 = x2,
+                      y2 = y2,
+                      metadata = metadata,
+                      bboxes = bboxes,
+                      bbox_format = bbox_format)
 
-        return F.change_aspect_ratio(image,
-                                     ratio = random.uniform(0.5, 2),
-                                     metadata = metadata,
-                                     bboxes = bboxes,
-                                     bbox_format = bbox_format)
-        
-        
-        
 
-        
+TRAINING_FOLDER = '/home/leejiahe/copydetection/data/query_dev/'
         
         
 transforms_list = [OverlayRandomStripes(),
                    OverlayRandomEmoji(),
-                   RandomPixelization(),
                    EncodingRandomQuality(),
+                   MemeRandomFormat(),
                    OverlayRandomText(),
                    RandomSaturation(),
                    ApplyRandomPILFilter(),
-                   RandomBrightness(),
-                   OverlayOntoRandomBackgroundImage(),
-                   OverlayOntoRandomForegroundImage(),
+                   OverlayOntoRandomBackgroundImage(TRAINING_FOLDER),
+                   OverlayOntoRandomForegroundImage(TRAINING_FOLDER),
                    RandomShufflePixels(),
                    OverlayOntoRandomScreenshot(),
                    RandomPadSquare(),
                    ConvertRandomColor(),
-                   RandomChangeAspectRatio(),
-                   transforms.RandomRotation(p = 1),
-                   transforms.GaussianBlur(p = 1),
-                   transforms.RandomGrayscale(p = 1),
-                   transforms.RandomCrop(p = 1),
-                   transforms.RandomPerspective(p = 1),
-                   transforms.RandomInvert(p = 1),
-                   transforms.RandomPosterize(p = 1),
-                   transforms.RandomSolarize(p = 1),
-                   transforms.RandomVerticalFlip(p = 1),
-                   transforms.RandomHorizontalFlip(p = 1),
+                   RandomCropping(),
+                   imaugs.RandomAspectRatio(),
+                   imaugs.RandomPixelization(0, 0.7),
+                   imaugs.RandomBlur(2, 10),
+                   imaugs.RandomBrightness(0.1, 1),
+                   imaugs.RandomRotation(-90, 90),
+                   imaugs.Grayscale(),
+                   imaugs.PerspectiveTransform(),
+                   imaugs.VFlip(),
+                   imaugs.HFlip(),
                    ]
 
 
 augs = N_Compositions(transforms_list, n_upper = 6, n_lower = 4)
+H = W = 224
+
+trfs = transforms.Compose([transforms.ToTensor(), transforms.Resize((H, W)), transforms.Normalize(IMAGENET_MEAN, IMAGENET_SDEV)])
+
+
