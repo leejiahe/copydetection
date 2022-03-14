@@ -399,38 +399,6 @@ class RandomCropping(imaugs.Crop):
                       bbox_format = bbox_format)
 
 
-TRAINING_FOLDER = '/home/leejiahe/copydetection/data/query_dev/'
-        
-        
-transforms_list = [OverlayRandomStripes(),
-                   OverlayRandomEmoji(),
-                   EncodingRandomQuality(),
-                   MemeRandomFormat(),
-                   OverlayRandomText(),
-                   RandomSaturation(),
-                   ApplyRandomPILFilter(),
-                   OverlayOntoRandomBackgroundImage(TRAINING_FOLDER),
-                   OverlayOntoRandomForegroundImage(TRAINING_FOLDER),
-                   RandomShufflePixels(),
-                   OverlayOntoRandomScreenshot(),
-                   RandomPadSquare(),
-                   ConvertRandomColor(),
-                   RandomCropping(),
-                   imaugs.RandomAspectRatio(),
-                   imaugs.RandomPixelization(0, 0.7),
-                   imaugs.RandomBlur(2, 10),
-                   imaugs.RandomBrightness(0.1, 1),
-                   imaugs.RandomRotation(-90, 90),
-                   imaugs.Grayscale(),
-                   imaugs.PerspectiveTransform(),
-                   imaugs.VFlip(),
-                   imaugs.HFlip(),
-                   ]
 
-
-augs = N_Compositions(transforms_list, n_upper = 6, n_lower = 4)
-H = W = 224
-
-trfs = transforms.Compose([transforms.ToTensor(), transforms.Resize((H, W)), transforms.Normalize(IMAGENET_MEAN, IMAGENET_SDEV)])
 
 
