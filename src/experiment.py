@@ -43,7 +43,5 @@ def train(config: DictConfig) -> Optional[float]:
     log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
     datamodule: LightningDataModule = hydra.utils.instantiate(config.datamodule)
     datamodule.setup()
-    datamodule.setup_folds()
-    #datamodule.prepare_data()
 
     b =  next(iter(datamodule.train_dataloader()))
