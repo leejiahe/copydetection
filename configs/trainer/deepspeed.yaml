@@ -1,7 +1,7 @@
 defaults:
   - default.yaml
 
-strategy: ddp
+strategy: deepspeed_stage_2
 precision: 16
 sync_batchnorm: True
 accumulate_grad_batches: 8

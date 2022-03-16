@@ -9,7 +9,10 @@ import torch.nn as nn
 from patch_embeddings import PatchEmbeddings
 
 class CopyDetectEmbedding(nn.Module):
-    def __init__(self, config, vit_cls, pos_emb):
+    def __init__(self,
+                 config: object,
+                 vit_cls: torch.Tensor,
+                 pos_emb: torch.Tensor):
         super().__init__()
         self.vit_cls = vit_cls #pretrained cls token from ViT model
         self.position_embeddings = pos_emb #pretrained positional embedding from ViT model
@@ -65,42 +68,23 @@ class CopyDetectEmbedding(nn.Module):
         
         return self.dropout(embeddings)
     
-    def forward(self, img_r = None, img_q = None, interpolate_pos_encoding = False):
-        if img_r is not None:
-            emb_r = self.get_pos_encoding(img_r)
-            if img_q is None:
-                return emb_r
-            
-        if img_q is not None:
-            emb_q = self.get_pos_encoding(img_q)
-            if img_r is None:
-                return emb_q
-            
-        if img_r is not None and img_q is not None:
+    def forward(self, img_r, img_q = None, interpolate_pos_encoding = False):
+        emb_r = self.get_pos_encoding(img_r, interpolate_pos_encoding)
+        if img_q is None:
+            return emb_r            
+        else:
+            emb_q = self.get_pos_encoding(img_q, interpolate_pos_encoding)
             batch_size, seq_len_r, _ = emb_r.shape # shape: batch_size, seq_len, dim
-
-            segment_r = self.img_segment(torch.zeros((batch_size, seq_len_r), device = self.img_segment.weight.device, dtype = torch.int)) # First image segment (similar to sentence A in NSP) 
-            segment_q = self.img_segment(torch.ones((batch_size, emb_q.size(1)), device = self.img_segment.weight.device, dtype = torch.int)) # Second image segment (similar to sentence B in NSP)
-            
+            # First image segment (similar to sentence A in NSP) 
+            segment_r = self.img_segment(torch.zeros((batch_size, seq_len_r), device = self.img_segment.weight.device, dtype = torch.int))
+            # Second image segment (similar to sentence B in NSP)
+            segment_q = self.img_segment(torch.ones((batch_size, emb_q.size(1)), device = self.img_segment.weight.device, dtype = torch.int))
+            # Add segment embedding to reference and query embeddings
             emb_seg_r = emb_r + segment_r
             emb_seg_q = emb_q + segment_q
-            
             # Added first segment (similar to NSP) to cls and sep tokens, there is not positional encoding for this two tokens
             cls_token = self.cls_token.expand(batch_size, -1, -1) + segment_r 
             sep_token = self.sep_token.expand(batch_size, -1, -1) + segment_r
-            
-            indices = torch.arange(batch_size)
-            shuffled_indices = torch.randperm(batch_size) # Shuffled indices to create negative sample pairs within the batch
-            emb_r_shuffled = emb_seg_r[shuffled_indices] # Get the shuffled reference embeddings as negative samples
-            
-            true_labels = torch.ones(batch_size)
-            shuffled_labels = torch.eq(shuffled_indices, indices).long() # Compare shuffled labels with indices, take care of boundary cases
-            label_rq = torch.cat((true_labels, shuffled_labels))
-            
-            emb_rq_unshuffled = torch.cat((cls_token, emb_seg_r, sep_token, emb_seg_q), dim = 1)
-            emb_rq_shuffled = torch.cat((cls_token, emb_r_shuffled, sep_token, emb_seg_q), dim = 1)
-            emb_rq = torch.cat((emb_rq_unshuffled, emb_rq_shuffled), dim = 0)
-            
-            return emb_r, emb_q, emb_rq, label_rq
-        else:
-            raise ValueError('img_r and img_q cannot both be None')
+            # Concat cls, ref emb, sep, query emb
+            emb_rq = torch.cat((cls_token, emb_seg_r, sep_token, emb_seg_q), dim = 1)
+            return emb_r, emb_q, emb_rq

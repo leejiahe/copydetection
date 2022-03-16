@@ -2,11 +2,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import ViTForImageClassification
+from transformers import ViTModel
 
 class SimImageHead(nn.Module):
-    hidden_size: int = 768
-    def __init__(self, config):
+    def __init__(self,
+                 config: object,
+                 hidden_size: int = 768):
         super().__init__()
         self.project = nn.Linear(config.hidden_size, 1)
 
@@ -17,16 +18,16 @@ class SimImageHead(nn.Module):
 class Projection(nn.Module):
     # Inspired by:
     # https://github.com/PyTorchLightning/Lightning-Bolts/blob/master/pl_bolts/models/self_supervised/simclr/simclr_module.py
-    hidden_size: int = 768
-    projected_hidden_size:int = 2048
-    projected_size: int = 512
-    def __init__(self):
+    def __init__(self,
+                 hidden_size: int = 768,
+                 projected_hidden_size:int = 2048,
+                 projected_size: int = 512):
         super().__init__()
 
-        self.model = nn.Sequential(nn.Linear(self.hidden_size, self.projected_hidden_size),
-                                   nn.BatchNorm1d(self.projected_hidden_size),
+        self.model = nn.Sequential(nn.Linear(hidden_size, projected_hidden_size),
+                                   nn.BatchNorm1d(projected_hidden_size),
                                    nn.ReLU(),
-                                   nn.Linear(self.projected_hidden_size, self.projected_size, bias = False))
+                                   nn.Linear(projected_hidden_size, projected_size, bias = False))
 
     def forward(self, x):
         x = self.model(x)
@@ -35,7 +36,7 @@ class Projection(nn.Module):
 class CopyDetectViT(nn.Module):
     def __init__(self, pretrained_arch, config):
         super().__init__()
-        pretrained_model = ViTForImageClassification.from_pretrained(pretrained_arch)
+        pretrained_model = ViTModel.from_pretrained(pretrained_arch)
         # We only use the encoder and layernorm from ViT, we will use a different embedding and prediction head
         self.encoder = nn.Sequential(pretrained_model.vit.encoder,
                                      pretrained_model.vit.layernorm)

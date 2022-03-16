@@ -1,12 +1,12 @@
 _target_: pytorch_lightning.Trainer
 
-gpus: 0
-
+accelerator: gpu
+device: 8
+num_nodes: 1
 min_epochs: 1
-max_epochs: 10
-
-# number of validation steps to execute at the beginning of the training
-# num_sanity_val_steps: 0
-
-# ckpt path
+max_epochs: 30
+check_val_every_n_epoch: 1
 resume_from_checkpoint: null
+detect_anomaly: True
+gradient_clip_val: 0.5
+profiler: simple

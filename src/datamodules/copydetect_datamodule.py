@@ -70,13 +70,13 @@ class CopyDetectDataset(Dataset):
 
 @dataclass
 class CopyDetectDataModule(LightningDataModule):
-    train_dir: str # Train directory
-    references_dir: str # Reference directory
-    dev_queries_dir: str  # Dev queries directory
-    final_queries_dir: str # Final queries directory
-    augment: object # Augmentation object from augment.py
-    dev_validation_set: str # Validation set created from dev ground truth, with randomly selected negative reference image pair  
-    dev_ground_truth: str = None # Dev ground truth containing queries and corresponding reference pair
+    train_dir: str                  # Train directory
+    references_dir: str             # Reference directory
+    dev_queries_dir: str            # Dev queries directory
+    final_queries_dir: str          # Final queries directory
+    augment: object                 # Augmentation object from augment.py
+    dev_validation_set: str         # Validation set created from dev ground truth, with randomly selected negative reference image pair  
+    dev_ground_truth: str = None    # Dev ground truth containing queries and corresponding reference pair
     batch_size: int = 128
     num_workers: int = 0
     pin_memory: bool = False
@@ -138,7 +138,10 @@ class CopyDetectDataModule(LightningDataModule):
         with open(self.dev_validation_set, 'r') as csvfile:
             csvreader = csv.reader(csvfile, delimiter = ',')
             for row in csvreader:
-                val_data.append(row)
+                ref_image = os.path.join(self.hparams.references_dir, row[0])
+                query_image = os.path.join(self.hparams.references_dir, row[1])
+                label = row[2]
+                val_data.append((ref_image, query_image, label))
         
         self.train_dataset = CopyDetectDataset(image_files = get_image_file(self.hparams.train_dir),
                                                image_size = self.hparams.image_size,

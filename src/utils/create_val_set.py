@@ -18,16 +18,13 @@ with open(ground_truth_path) as csvfile:
     for row in csvreader: # Row return query_id, reference_id
         ref_image = f'{row[1]}.jpg'
         query_image = f'{row[0]}.jpg'
-        query_image_path = os.path.join(query_dev_dir, query_image)
-        ref_image_path = os.path.join(reference_dir, ref_image)
-        
+    
         rand_image = ref_image
         while(rand_image == ref_image):
             rand_image = random.choice(reference_images) # pick one reference image randomly
         
-        rand_image_path = os.path.join(reference_dir, rand_image)
-        val_data.append([ref_image_path, query_image_path, 1])
-        val_data.append([rand_image_path, query_image_path, 0])
+        val_data.append([ref_image, query_image, 1])
+        val_data.append([rand_image, query_image, 0])
         
 with open(val_path, 'w') as csvfile:
     writer = csv.writer(csvfile)
