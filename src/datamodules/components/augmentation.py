@@ -14,18 +14,13 @@ from augly.image.composition import BaseComposition
 
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-
-
 SEED = 88
 
 randomRGB = lambda: (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
 
 letters = string.ascii_letters + string.digits + string.punctuation
 letters = [letter for letter in letters]
-randomText = lambda: (''.join(np.random.choice(letters, size = random.randint(3, 10), replace = False)))
-
-IMAGENET_MEAN = [0.485, 0.456, 0.406]
-IMAGENET_SDEV = [0.229, 0.224, 0.225]
+randomText = lambda: (''.join(random.sample(letters, k = random.randint(3, 10))))
 
 class N_Compositions(BaseComposition):
     def __init__(self,
@@ -125,10 +120,10 @@ class MemeRandomFormat(imaugs.MemeFormat):
 
         return F.meme_format(image,
                              text = randomText(),
-                             font_file = np.random.choice(self.font_paths),
+                             font_file = random.choice(self.font_paths),
                              opacity = random.uniform(0.5, 1),
                              text_color = randomRGB(),
-                             caption_height = random.uniform(50, 250),
+                             caption_height = random.randint(50, 250),
                              meme_bg_color = randomRGB(),
                              metadata = metadata,
                              bboxes = bboxes,
@@ -218,7 +213,7 @@ class ApplyRandomPILFilter(imaugs.ApplyPILFilter):
                         ) -> Image.Image:
 
         return F.apply_pil_filter(image,
-                                  filter_type = np.random.choice(self.filter_types),
+                                  filter_type = random.choice(self.filter_types),
                                   metadata = metadata,
                                   bboxes = bboxes,
                                   bbox_format = bbox_format)
@@ -240,7 +235,7 @@ class OverlayOntoRandomBackgroundImage(imaugs.OverlayOntoBackgroundImage):
                         ) -> Image.Image:
 
         return F.overlay_onto_background_image(image,
-                                               background_image = Image.open(np.random.choice(self.background_images)),
+                                               background_image = Image.open(random.choice(self.background_images)),
                                                opacity = random.uniform(0.8, 1),
                                                overlay_size = random.uniform(0.3, 0.6),
                                                x_pos = random.uniform(0, 0.4),
@@ -264,7 +259,7 @@ class OverlayOntoRandomForegroundImage(imaugs.OverlayOntoBackgroundImage):
                         bbox_format: Optional[str] = None,
                         ) -> Image.Image:
 
-        return F.overlay_onto_background_image(Image.open(np.random.choice(self.foreground_images)),
+        return F.overlay_onto_background_image(Image.open(random.choice(self.foreground_images)),
                                                background_image = image, 
                                                opacity = random.uniform(0.8, 1),
                                                overlay_size = random.uniform(0.3, 0.6),
@@ -310,7 +305,7 @@ class OverlayOntoRandomScreenshot(imaugs.OverlayOntoScreenshot):
 
         template_filepath = [os.path.join(self.template_filepath, f) for f in os.listdir(self.template_filepath) if f.endswith(('png', 'jpg'))]
         return F.overlay_onto_screenshot(image,
-                                         template_filepath = np.random.choice(template_filepath),
+                                         template_filepath = random.choice(template_filepath),
                                          template_bboxes_filepath = self.template_bboxes_filepath,
                                          max_image_size_pixels = None,
                                          crop_src_to_fit = False,
@@ -399,6 +394,43 @@ class RandomCropping(imaugs.Crop):
                       bbox_format = bbox_format)
 
 
-
+class Augment:
+    def __init__(self,
+                 overlay_image_dir: str = './',
+                 n_upper: int = 2,
+                 n_lower: int = 1):
+        
+        assert(os.path.exists(overlay_image_dir))
+        
+        transforms_list = [OverlayRandomStripes(),
+                           OverlayRandomEmoji(),
+                           EncodingRandomQuality(),
+                           MemeRandomFormat(),
+                           OverlayRandomText(),
+                           RandomSaturation(),
+                           ApplyRandomPILFilter(),
+                           OverlayOntoRandomBackgroundImage(overlay_image_dir),
+                           OverlayOntoRandomForegroundImage(overlay_image_dir),
+                           RandomShufflePixels(),
+                           OverlayOntoRandomScreenshot(),
+                           RandomPadSquare(),
+                           ConvertRandomColor(),
+                           RandomCropping(),
+                           imaugs.RandomAspectRatio(),
+                           imaugs.RandomPixelization(0, 0.7),
+                           imaugs.RandomBlur(2, 10),
+                           imaugs.RandomBrightness(0.1, 1),
+                           imaugs.RandomRotation(-90, 90),
+                           imaugs.Grayscale(),
+                           imaugs.PerspectiveTransform(),
+                           imaugs.VFlip(),
+                           imaugs.HFlip()]
+            
+        self.augment = N_Compositions(transforms_list, n_upper = n_upper, n_lower = n_lower)
+            
+    def __call__(self, image: Image.Image):
+            assert(isinstance(image, Image.Image))
+            return self.augment(image)
+            
 
 

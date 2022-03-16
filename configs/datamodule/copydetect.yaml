@@ -1,13 +1,21 @@
-_target_: src.datamodules.copydetect_datamodule.CDKFoldDataModule
+
+_target_: src.datamodules.copydetect_datamodule.CopyDetectDataModule
 
 #training_dir: ${data_dir}/training/
-training_dir: ${data_dir}/trial/
-reference_dir: ${data_dir}/reference/
-query_dev_dir: ${data_dir}/query_dev/
-query_final_dir:  ${data_dir}/query_final/
-train_fold: None
-val_fold: None
-batch_size: 128
-num_workers: 8
-pin_memory: False
-num_folds: 5
+train_dir: ${data_dir}/train/
+references_dir: ${data_dir}/references/
+dev_queries_dir: ${data_dir}/dev_queries/
+final_queries_dir:  ${data_dir}/final_queries/
+dev_validation_set: ${data_dir}/dev_validation_set.csv
+dev_ground_truth: ${data_dir}/dev_ground_truth.csv
+batch_size: 64
+num_workers: 10
+pin_memory: True
+n_crops: 4
+image_size: 224
+
+augment:
+  _target_: src.datamodules.components.augmentation.Augment
+  overlay_image_dir: ${data_dir}/train
+  n_upper: 6
+  n_lower: 4
