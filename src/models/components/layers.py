@@ -1,21 +1,51 @@
 # Inspired bny
 # https://github.com/huggingface/transformers/blob/v4.17.0/src/transformers/models/vit/modeling_vit.py
 
-from typing import Optional, List, Union
+import collections.abc
+from typing import Optional, List
 from PIL import Image 
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .patch_embeddings import PatchEmbeddings
+import collections.abc
+from torch import nn
+
+def to_2tuple(x):
+    if isinstance(x, collections.abc.Iterable):
+        return x
+    return (x, x)
+
+class PatchEmbeddings(nn.Module):
+    # Based on timm implementation, which can be found here:
+    # https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
+
+    def __init__(self, image_size = 224, patch_size = 16, num_channels = 3, embed_dim = 768):
+        super().__init__()
+        image_size = to_2tuple(image_size)
+        patch_size = to_2tuple(patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_patches = num_patches
+
+        self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size = patch_size, stride = patch_size)
+
+    def forward(self, pixel_values, interpolate_pos_encoding=False):
+        batch_size, num_channels, height, width = pixel_values.shape
+        if not interpolate_pos_encoding:
+            if height != self.image_size[0] or width != self.image_size[1]:
+                raise ValueError(f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]}).")
+        x = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        return x
 
 class SimImagePred(nn.Module):
     def __init__(self,
                  embedding_dim: int = 768):
         super().__init__()
         self.project = nn.Sequential(nn.Linear(embedding_dim, embedding_dim),
-                                     nn.Tanh(),
+                                     nn.ReLU(),
                                      nn.Linear(embedding_dim, 1))
 
     def forward(self, emb_rq):
@@ -45,7 +75,7 @@ class ContrastiveProj(nn.Module):
 class NormalizedFeatures(nn.Module):
     def __init__(self,
                  hidden_dim: int = 768,
-                 layer_norm_eps = 0.1):
+                 layer_norm_eps = 1e-5):
         super().__init__()
         self.layernorm = nn.LayerNorm(hidden_dim, eps = layer_norm_eps)
         
@@ -76,21 +106,21 @@ class CopyDetectEmbedding(nn.Module):
     def forward(self,
                 img_r: List[Image.Image],
                 img_q: Optional[List[Image.Image]] = None):
-        
+        batch_size, _, _, _ = img_r.size() # shape: batch_size, num channel, h, w
         vit_cls = self.vit_cls.expand(batch_size, -1, -1)
         
         emb_r = self.patch_embeddings(img_r)
         emb_r = torch.cat((vit_cls, emb_r), dim = 1)
+        emb_r = self.dropout(emb_r)
         if img_q is None:
-            return self.dropout(emb_r)            
+            return emb_r            
         else:
             emb_q = self.patch_embeddings(img_q)
             emb_q = torch.cat((vit_cls, emb_q), dim = 1)
             emb_q = self.dropout(emb_q)
-        
-            batch_size, seq_len_r, _ = emb_r.shape # shape: batch_size, seq_len, dim
+            
             # First image segment (similar to sentence A in NSP) 
-            segment_r = self.img_segment(torch.zeros((batch_size, seq_len_r), device = self.img_segment.weight.device, dtype = torch.int))
+            segment_r = self.img_segment(torch.zeros((batch_size, emb_r.size(1)), device = self.img_segment.weight.device, dtype = torch.int))
             # Second image segment (similar to sentence B in NSP)
             segment_q = self.img_segment(torch.ones((batch_size, emb_q.size(1)), device = self.img_segment.weight.device, dtype = torch.int))
             # Add segment embedding to reference and query embeddings
@@ -101,4 +131,4 @@ class CopyDetectEmbedding(nn.Module):
             sep_token = self.sep_token.expand(batch_size, -1, -1) + segment_r
             # Concat cls, ref emb, sep, query emb
             emb_rq = torch.cat((cls_token, emb_seg_r, sep_token, emb_seg_q), dim = 1)
-            return emb_r, emb_q, emb_rq
+            return emb_rq

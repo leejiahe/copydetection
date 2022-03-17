@@ -123,7 +123,7 @@ class MemeRandomFormat(imaugs.MemeFormat):
                              font_file = random.choice(self.font_paths),
                              opacity = random.uniform(0.5, 1),
                              text_color = randomRGB(),
-                             caption_height = random.randint(50, 250),
+                             caption_height = random.randint(50, 100),
                              meme_bg_color = randomRGB(),
                              metadata = metadata,
                              bboxes = bboxes,
@@ -237,7 +237,7 @@ class OverlayOntoRandomBackgroundImage(imaugs.OverlayOntoBackgroundImage):
         return F.overlay_onto_background_image(image,
                                                background_image = Image.open(random.choice(self.background_images)),
                                                opacity = random.uniform(0.8, 1),
-                                               overlay_size = random.uniform(0.3, 0.6),
+                                               overlay_size = random.uniform(0.3, 0.5),
                                                x_pos = random.uniform(0, 0.4),
                                                y_pos = random.uniform(0, 0.4),
                                                scale_bg = False,
@@ -262,7 +262,7 @@ class OverlayOntoRandomForegroundImage(imaugs.OverlayOntoBackgroundImage):
         return F.overlay_onto_background_image(Image.open(random.choice(self.foreground_images)),
                                                background_image = image, 
                                                opacity = random.uniform(0.8, 1),
-                                               overlay_size = random.uniform(0.3, 0.6),
+                                               overlay_size = random.uniform(0.3, 0.5),
                                                x_pos = random.uniform(0, 0.4),
                                                y_pos = random.uniform(0, 0.4),
                                                scale_bg = False,
@@ -308,7 +308,7 @@ class OverlayOntoRandomScreenshot(imaugs.OverlayOntoScreenshot):
                                          template_filepath = random.choice(template_filepath),
                                          template_bboxes_filepath = self.template_bboxes_filepath,
                                          max_image_size_pixels = None,
-                                         crop_src_to_fit = False,
+                                         crop_src_to_fit = True,
                                          resize_src_to_match_template = True,
                                          metadata = metadata,
                                          bboxes = bboxes,
@@ -381,8 +381,8 @@ class RandomCropping(imaugs.Crop):
         
         x1 = random.uniform(0, 0.4)
         y1 = random.uniform(0, 0.4)
-        x2 = x1 + random.uniform(0, 0.4)
-        y2 = y1 + random.uniform(0, 0.4)
+        x2 = x1 + random.uniform(0, 0.3)
+        y2 = y1 + random.uniform(0, 0.3)
         
         return F.crop(image,
                       x1 = x1,

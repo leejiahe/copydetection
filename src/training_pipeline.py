@@ -3,31 +3,19 @@ from typing import List, Optional
 
 import hydra
 from omegaconf import DictConfig
-from pytorch_lightning import (
-    Callback,
-    LightningDataModule,
-    LightningModule,
-    Trainer,
-    seed_everything,
-)
+from pytorch_lightning import (Callback,
+                               LightningDataModule,
+                               LightningModule,
+                               Trainer,
+                               seed_everything)
+
 from pytorch_lightning.loggers import LightningLoggerBase
 
 from src import utils
 
 log = utils.get_logger(__name__)
 
-
 def train(config: DictConfig) -> Optional[float]:
-    """Contains the training pipeline.
-    Can additionally evaluate model on a testset, using best weights achieved during training.
-
-    Args:
-        config (DictConfig): Configuration composed by Hydra.
-
-    Returns:
-        Optional[float]: Metric score for hyperparameter optimization.
-    """
-
     # Set seed for random number generators in pytorch, numpy and python.random
     if config.get("seed"):
         seed_everything(config.seed, workers=True)
@@ -35,9 +23,7 @@ def train(config: DictConfig) -> Optional[float]:
     # Convert relative ckpt path to absolute path if necessary
     ckpt_path = config.trainer.get("resume_from_checkpoint")
     if ckpt_path and not os.path.isabs(ckpt_path):
-        config.trainer.resume_from_checkpoint = os.path.join(
-            hydra.utils.get_original_cwd(), ckpt_path
-        )
+        config.trainer.resume_from_checkpoint = os.path.join(hydra.utils.get_original_cwd(), ckpt_path)
 
     # Init lightning datamodule
     log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
@@ -65,57 +51,34 @@ def train(config: DictConfig) -> Optional[float]:
 
     # Init lightning trainer
     log.info(f"Instantiating trainer <{config.trainer._target_}>")
-    trainer: Trainer = hydra.utils.instantiate(
-        config.trainer, callbacks=callbacks, logger=logger, _convert_="partial"
-    )
+    trainer: Trainer = hydra.utils.instantiate(config.trainer,
+                                               callbacks = callbacks,
+                                               logger = logger,
+                                               _convert_ = "partial")
 
     # Send some parameters from config to all lightning loggers
     log.info("Logging hyperparameters!")
-    utils.log_hyperparameters(
-        config=config,
-        model=model,
-        datamodule=datamodule,
-        trainer=trainer,
-        callbacks=callbacks,
-        logger=logger,
-    )
+    utils.log_hyperparameters(config = config,
+                              model = model,
+                              datamodule = datamodule,
+                              trainer = trainer,
+                              callbacks = callbacks,
+                              logger = logger)
 
     # Train the model
     if config.get("train"):
         log.info("Starting training!")
-        trainer.fit(model=model, datamodule=datamodule)
-
-    # Get metric score for hyperparameter optimization
-    optimized_metric = config.get("optimized_metric")
-    if optimized_metric and optimized_metric not in trainer.callback_metrics:
-        raise Exception(
-            "Metric for hyperparameter optimization not found! "
-            "Make sure the `optimized_metric` in `hparams_search` config is correct!"
-        )
-    score = trainer.callback_metrics.get(optimized_metric)
-
-    # Test the model
-    if config.get("test"):
-        ckpt_path = "best"
-        if not config.get("train") or config.trainer.get("fast_dev_run"):
-            ckpt_path = None
-        log.info("Starting testing!")
-        trainer.test(model=model, datamodule=datamodule, ckpt_path=ckpt_path)
+        trainer.fit(model = model, datamodule = datamodule)
 
     # Make sure everything closed properly
     log.info("Finalizing!")
-    utils.finish(
-        config=config,
-        model=model,
-        datamodule=datamodule,
-        trainer=trainer,
-        callbacks=callbacks,
-        logger=logger,
-    )
+    utils.finish(config = config,
+                 model = model,
+                 datamodule = datamodule,
+                 trainer = trainer,
+                 callbacks = callbacks,
+                 logger = logger)
 
     # Print path to best checkpoint
     if not config.trainer.get("fast_dev_run") and config.get("train"):
         log.info(f"Best model ckpt at {trainer.checkpoint_callback.best_model_path}")
-
-    # Return metric score for hyperparameter optimization
-    return score

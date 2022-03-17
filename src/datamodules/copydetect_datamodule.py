@@ -46,7 +46,7 @@ class CopyDetectPretrainDataset(Dataset):
                 aug_index = index
                 if random.random() > 0.5:
                     aug_index = random.randint(0, len(self.image_files)) # Get random image file
-                label = torch.tensor(aug_index == index, dtype = torch.long) # label 1: modified copy: aug_index == index 
+                label = torch.tensor(aug_index == index, dtype = torch.float) # label 1: modified copy: aug_index == index 
                 aug_image = Image.open(self.image_files[aug_index])
                 
                 imgs.append(self.transform(image))
@@ -81,7 +81,7 @@ class CopyDetectValDataset(Dataset):
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         ref_image_path, query_image_path, label = self.val_data[index]
         ref_image, query_image = Image.open(ref_image_path), Image.open(query_image_path)
-        return (self.transform(ref_image), self.transform(query_image), torch.tensor(label))
+        return (self.transform(ref_image), self.transform(query_image), torch.tensor(label, dtype = torch.float))
 
 
 
@@ -122,8 +122,9 @@ class CopyDetectDataModule(LightningDataModule):
         self.save_hyperparameters(logger = False)
         
     def prepare_data(self) -> None:
+        pass
         # Download data
-        raise NotImplementedError
+        """
         urls_list = {'train_dir': [],
                      'references_dir': [],
                      'dev_queries_dir': [],
@@ -166,6 +167,7 @@ class CopyDetectDataModule(LightningDataModule):
         with open(val_path, 'w') as csvfile:
             writer = csv.writer(csvfile)
             writer.writerows(val_data)
+        """
     
     def setup(self, stage: Optional[str] = None) -> None:
         # load the data
