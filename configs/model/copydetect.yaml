@@ -1,0 +1,8 @@
+_target_: src.models.copydetect_module.CopyDetectModule
+pretrained_arch: 'google/vit-base-patch16-224'
+lr: 0.001
+weight_decay: 0.0005
+temperature: 0.9
+memory_size: 2048
+hidden_dim: 2048
+projected_dim: 512

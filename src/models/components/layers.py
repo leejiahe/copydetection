@@ -1,13 +1,56 @@
 # Inspired bny
 # https://github.com/huggingface/transformers/blob/v4.17.0/src/transformers/models/vit/modeling_vit.py
 
-from Typing import Optional, List, Union
+from typing import Optional, List, Union
 from PIL import Image 
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
-from patch_embeddings import PatchEmbeddings
+from .patch_embeddings import PatchEmbeddings
+
+class SimImagePred(nn.Module):
+    def __init__(self,
+                 embedding_dim: int = 768):
+        super().__init__()
+        self.project = nn.Sequential(nn.Linear(embedding_dim, embedding_dim),
+                                     nn.Tanh(),
+                                     nn.Linear(embedding_dim, 1))
+
+    def forward(self, emb_rq):
+        cls = emb_rq[:, 0, :] # Only get the cls token
+        sim_img_score = self.project(cls)
+        return sim_img_score
+    
+class ContrastiveProj(nn.Module):
+    # Inspired by:
+    # https://github.com/PyTorchLightning/Lightning-Bolts/blob/master/pl_bolts/models/self_supervised/simclr/simclr_module.py
+    def __init__(self,
+                 embedding_dim: int = 768,
+                 hidden_dim:int = 2048,
+                 projected_dim: int = 512):
+        super().__init__()
+
+        self.model = nn.Sequential(nn.Linear(embedding_dim, hidden_dim),
+                                   nn.BatchNorm1d(hidden_dim),
+                                   nn.ReLU(),
+                                   nn.Linear(hidden_dim, projected_dim, bias = False))
+
+    def forward(self, x: torch.Tensor):
+        cls = x[:, 0, :] # Only get the vit cls token
+        cls = self.model(cls)
+        return F.normalize(cls, dim = 1)
+
+class NormalizedFeatures(nn.Module):
+    def __init__(self,
+                 hidden_dim: int = 768,
+                 layer_norm_eps = 0.1):
+        super().__init__()
+        self.layernorm = nn.LayerNorm(hidden_dim, eps = layer_norm_eps)
+        
+    def forward(self, outputs):
+        return self.layernorm(outputs.last_hidden_state)
 
 class CopyDetectEmbedding(nn.Module):
     def __init__(self,
@@ -32,8 +75,7 @@ class CopyDetectEmbedding(nn.Module):
     
     def forward(self,
                 img_r: List[Image.Image],
-                img_q: Optional[List[Image.Image]] = None,
-                )-> Union[torch.Tensor, List[torch.Tensor, torch.Tensor, torch.Tensor]]:
+                img_q: Optional[List[Image.Image]] = None):
         
         vit_cls = self.vit_cls.expand(batch_size, -1, -1)
         
@@ -44,6 +86,7 @@ class CopyDetectEmbedding(nn.Module):
         else:
             emb_q = self.patch_embeddings(img_q)
             emb_q = torch.cat((vit_cls, emb_q), dim = 1)
+            emb_q = self.dropout(emb_q)
         
             batch_size, seq_len_r, _ = emb_r.shape # shape: batch_size, seq_len, dim
             # First image segment (similar to sentence A in NSP) 

@@ -4,34 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import ViTModel
 
-class SimImageHead(nn.Module):
-    def __init__(self,
-                 config: object,
-                 hidden_size: int = 768):
-        super().__init__()
-        self.project = nn.Linear(config.hidden_size, 1)
 
-    def forward(self, img_emb_rq):
-        sim_img_score = self.project(img_emb_rq)
-        return sim_img_score
-    
-class Projection(nn.Module):
-    # Inspired by:
-    # https://github.com/PyTorchLightning/Lightning-Bolts/blob/master/pl_bolts/models/self_supervised/simclr/simclr_module.py
-    def __init__(self,
-                 hidden_size: int = 768,
-                 projected_hidden_size:int = 2048,
-                 projected_size: int = 512):
-        super().__init__()
-
-        self.model = nn.Sequential(nn.Linear(hidden_size, projected_hidden_size),
-                                   nn.BatchNorm1d(projected_hidden_size),
-                                   nn.ReLU(),
-                                   nn.Linear(projected_hidden_size, projected_size, bias = False))
-
-    def forward(self, x):
-        x = self.model(x)
-        return F.normalize(x, dim = 1)
 
 class CopyDetectViT(nn.Module):
     def __init__(self, pretrained_arch, config):
