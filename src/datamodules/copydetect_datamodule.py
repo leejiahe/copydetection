@@ -17,57 +17,91 @@ from pytorch_lightning import LightningDataModule
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_SDEV = [0.229, 0.224, 0.225]
 
+
 # Return all the image paths in a folder
 get_image_file = lambda image_dir: [os.path.join(image_dir, f) for f in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, f))]
-
-class CopyDetectDataset(Dataset):
-    def __init__(self,
-                 image_files: list,
-                 image_size: int,
-                 augment: object = None,
-                 val: bool = False,
-                 pretrain: bool = False,
-                 n_crops: int = 1):
         
-        self.image_files = image_files
-        self.pretrain = pretrain
-        self.val = val
+class CopyDetectPretrainDataset(Dataset):
+    def __init__(self,
+                 image_dir: str,
+                 transform,
+                 augment: object = None,
+                 n_crops: Optional[int] = 1):
+        
+        self.image_files = [os.path.join(image_dir, f) for f in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, f))]
         self.augment = augment
         self.n_crops = n_crops
-
-        self.trfm = transforms.Compose([transforms.ToTensor(),
-                                        transforms.Resize((image_size, image_size)),
-                                        transforms.Normalize(IMAGENET_MEAN, IMAGENET_SDEV)])
-        
+        self.transform = transform
         
     def __len__(self) -> int:
         return len(self.image_files)
     
-    def __getitem__(self, index: int) -> Union[Tuple[torch.Tensor, torch.Tensor, torch.Tensor], 
-                                               List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
-                                               torch.Tensor]:
-        if self.val:
-            ref_image_path, query_image_path, label = self.image_file[index]
-            ref_image, query_image = Image.open(ref_image_path), Image.open(query_image_path)
-            return (self.trfm(ref_image), self.trfm(query_image), torch.tensor(label))
-        else:
+    def __getitem__(self, index: int) -> List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
             image_path = self.image_files[index]
             image = Image.open(image_path)
 
-            if self.pretrain:
-                imgs = []
-                for _ in range(self.n_crops):
-                    aug_index = index
-                    if random.random() > 0.5:
-                        aug_index = random.randint(0, len(self.image_files)) # Get random image file
-                    label = torch.tensor(aug_index == index, dtype = torch.long) # label 1: modified copy: aug_index == index 
-                    aug_image = Image.open(self.image_files[aug_index])
-                    imgs.append((self.trfm(image), self.trfm(self.augment(aug_image)), label))
-                return imgs
-            else:
-                return self.trfm(image)
+            imgs, aug_imgs, labels = [], [], []
+            imgs = []
+            for _ in range(self.n_crops):
+                aug_index = index
+                if random.random() > 0.5:
+                    aug_index = random.randint(0, len(self.image_files)) # Get random image file
+                label = torch.tensor(aug_index == index, dtype = torch.long) # label 1: modified copy: aug_index == index 
+                aug_image = Image.open(self.image_files[aug_index])
+                
+                imgs.append(self.transform(image))
+                aug_imgs.append(self.transform(self.augment(aug_image)))
+                labels.append(label)
         
+            return imgs, aug_imgs, labels
 
+
+        
+class CopyDetectValDataset(Dataset):
+    def __init__(self,
+                 references_dir: str,
+                 queries_dir: str,
+                 dev_validation_set: str,
+                 transform):
+        
+        self.val_data = []
+        with open(dev_validation_set, 'r') as csvfile:
+            csvreader = csv.reader(csvfile, delimiter = ',')
+            for row in csvreader:
+                ref_image = os.path.join(references_dir, row[0])
+                query_image = os.path.join(queries_dir, row[1])
+                label = int(row[2])
+                self.val_data.append((ref_image, query_image, label))
+        self.transform = transform
+        
+        
+    def __len__(self) -> int:
+        return len(self.val_data)
+    
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        ref_image_path, query_image_path, label = self.val_data[index]
+        ref_image, query_image = Image.open(ref_image_path), Image.open(query_image_path)
+        return (self.transform(ref_image), self.transform(query_image), torch.tensor(label))
+
+
+
+class CopyDetectDataset(Dataset):
+    def __init__(self,
+                 image_dir: str,
+                 transform):
+        self.image_files = [os.path.join(image_dir, f) for f in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, f))]
+        self.transform = transform
+        
+    def __len__(self) -> int:
+        return len(self.image_files)
+    
+    def __getitem__(self, index: int) -> torch.Tensor:
+        image_path = self.image_files[index]
+        image = Image.open(image_path)
+        return self.transform(image)
+    
+    
+    
 @dataclass
 class CopyDetectDataModule(LightningDataModule):
     train_dir: str                  # Train directory
@@ -75,7 +109,7 @@ class CopyDetectDataModule(LightningDataModule):
     dev_queries_dir: str            # Dev queries directory
     final_queries_dir: str          # Final queries directory
     augment: object                 # Augmentation object from augment.py
-    dev_validation_set: str         # Validation set created from dev ground truth, with randomly selected negative reference image pair  
+    dev_validation_set: str = None  # Validation set created from dev ground truth, with randomly selected negative reference image pair  
     dev_ground_truth: str = None    # Dev ground truth containing queries and corresponding reference pair
     batch_size: int = 128
     num_workers: int = 0
@@ -89,6 +123,7 @@ class CopyDetectDataModule(LightningDataModule):
         
     def prepare_data(self) -> None:
         # Download data
+        raise NotImplementedError
         urls_list = {'train_dir': [],
                      'references_dir': [],
                      'dev_queries_dir': [],
@@ -134,61 +169,53 @@ class CopyDetectDataModule(LightningDataModule):
     
     def setup(self, stage: Optional[str] = None) -> None:
         # load the data
-        val_data = []
-        with open(self.dev_validation_set, 'r') as csvfile:
-            csvreader = csv.reader(csvfile, delimiter = ',')
-            for row in csvreader:
-                ref_image = os.path.join(self.hparams.references_dir, row[0])
-                query_image = os.path.join(self.hparams.references_dir, row[1])
-                label = row[2]
-                val_data.append((ref_image, query_image, label))
+        transform = transforms.Compose([transforms.ToTensor(),
+                                        transforms.Resize((self.image_size, self.image_size)),
+                                        transforms.Normalize(IMAGENET_MEAN, IMAGENET_SDEV)])
         
-        self.train_dataset = CopyDetectDataset(image_files = get_image_file(self.hparams.train_dir),
-                                               image_size = self.hparams.image_size,
-                                               pretrain = True,
-                                               augment = self.augment,
-                                               n_crops = self.hparams.n_crops)
+        self.train_dataset = CopyDetectPretrainDataset(image_dir = self.train_dir,
+                                                       transform = transform,
+                                                       augment = self.augment,
+                                                       n_crops = self.n_crops)
         
-        self.val_dataset = CopyDetectDataset(image_files = val_data,
-                                             image_size = self.hparams.image_size,
-                                             pretrain = False,
-                                             val = True)
+        self.val_dataset = CopyDetectValDataset(dev_validation_set = self.dev_validation_set,
+                                                references_dir = self.references_dir,
+                                                queries_dir = self.dev_queries_dir,
+                                                transform = transform)
         
-        self.reference_dataset = CopyDetectDataset(image_files = get_image_file(self.hparams.references_dir),
-                                                   image_size = self.hparams.image_size,
-                                                   pretrain = False)
+        self.reference_dataset = CopyDetectDataset(self.references_dir,
+                                                   transform = transform)
     
-        self.query_final_dataset = CopyDetectDataset(image_files = get_image_file(self.hparams.final_queries_dir),
-                                                     image_size = self.hparams.image_size,
-                                                     pretrain = False)
+        self.query_final_dataset = CopyDetectDataset(self.final_queries_dir,
+                                                     transform = transform)
         
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(dataset = self.train_dataset,
-                          batch_size = self.hparams.batch_size,
-                          num_workers = self.hparams.num_workers,
-                          pin_memory = self.hparams.pin_memory,
+                          batch_size = self.batch_size,
+                          num_workers = self.num_workers,
+                          pin_memory = self.pin_memory,
                           shuffle = True,
                           drop_last = True)
 
     def val_dataloader(self) -> DataLoader:
         return DataLoader(dataset = self.val_dataset,
-                          batch_size = self.hparams.batch_size,
-                          num_workers = self.hparams.num_workers,
-                          pin_memory = self.hparams.pin_memory,
+                          batch_size = self.batch_size,
+                          num_workers = self.num_workers,
+                          pin_memory = self.pin_memory,
                           shuffle = False)
             
     def ref_dataloader(self) -> DataLoader:
         return DataLoader(dataset = self.reference_dataset,
-                          batch_size = self.hparams.batch_size,
-                          num_workers = self.hparams.num_workers,
-                          pin_memory = self.hparams.pin_memory,
+                          batch_size = self.batch_size,
+                          num_workers = self.num_workers,
+                          pin_memory = self.pin_memory,
                           shuffle = False)
         
     def test_dataloader(self) -> DataLoader:
         return DataLoader(dataset = self.query_final_dataset,
-                          batch_size = self.hparams.batch_size,
-                          num_workers = self.hparams.num_workers,
-                          pin_memory = self.hparams.pin_memory,
+                          batch_size = self.batch_size,
+                          num_workers = self.num_workers,
+                          pin_memory = self.pin_memory,
                           shuffle = False)
         

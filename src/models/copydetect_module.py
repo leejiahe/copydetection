@@ -8,7 +8,6 @@ from torchmetrics.classification.accuracy import Accuracy
 from pytorch_metric_learning.losses import CrossBatchMemory, NTXentLoss
 from pytorch_metric_learning.utils import distributed as pml_dist
 
-
 class CopyDetectModule(LightningModule):
     def __init__(self):
         super().__init__()

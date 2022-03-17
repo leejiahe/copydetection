@@ -1,7 +1,8 @@
 # Inspired bny
 # https://github.com/huggingface/transformers/blob/v4.17.0/src/transformers/models/vit/modeling_vit.py
 
-import math
+from Typing import Optional, List, Union
+from PIL import Image 
 
 import torch
 import torch.nn as nn
@@ -28,52 +29,22 @@ class CopyDetectEmbedding(nn.Module):
         
         self.patch_size = config.patch_size
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def get_pos_encoding(self, img, interpolate_pos_encoding = False):
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images.
-        Source:
-        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
-        """
-
-        batch_size, num_channels, height, width = img.shape
-        embeddings = self.patch_embeddings(img, interpolate_pos_encoding = interpolate_pos_encoding)
-
-        # add the pretrained [CLS] token to the embedded patch tokens
-        vit_cls = self.vit_cls.expand(batch_size, -1, -1)
-        embeddings = torch.cat((vit_cls, embeddings), dim = 1)
-        
-        npatch = embeddings.shape[1] - 1
-        N = self.position_embeddings.shape[1] - 1
-        if npatch == N and height == width:
-            embeddings = embeddings + self.position_embeddings
-            return self.dropout(embeddings)
-        
-        class_pos_embed = self.position_embeddings[:, 0]
-        patch_pos_embed = self.position_embeddings[:, 1:]
-        dim = embeddings.shape[-1]
-        
-        h0 = height // self.patch_size
-        w0 = width // self.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        h0, w0 = h0 + 0.1, w0 + 0.1
-        patch_pos_embed = nn.functional.interpolate(patch_pos_embed.reshape(1, int(math.sqrt(N)), int(math.sqrt(N)), dim).permute(0, 3, 1, 2),
-                                                    scale_factor = (h0 / math.sqrt(N), w0 / math.sqrt(N)), mode = "bicubic", align_corners = False)
-        assert int(h0) == patch_pos_embed.shape[-2] and int(w0) == patch_pos_embed.shape[-1]
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        
-        embeddings = embeddings + torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim = 1)
-        
-        return self.dropout(embeddings)
     
-    def forward(self, img_r, img_q = None, interpolate_pos_encoding = False):
-        emb_r = self.get_pos_encoding(img_r, interpolate_pos_encoding)
+    def forward(self,
+                img_r: List[Image.Image],
+                img_q: Optional[List[Image.Image]] = None,
+                )-> Union[torch.Tensor, List[torch.Tensor, torch.Tensor, torch.Tensor]]:
+        
+        vit_cls = self.vit_cls.expand(batch_size, -1, -1)
+        
+        emb_r = self.patch_embeddings(img_r)
+        emb_r = torch.cat((vit_cls, emb_r), dim = 1)
         if img_q is None:
-            return emb_r            
+            return self.dropout(emb_r)            
         else:
-            emb_q = self.get_pos_encoding(img_q, interpolate_pos_encoding)
+            emb_q = self.patch_embeddings(img_q)
+            emb_q = torch.cat((vit_cls, emb_q), dim = 1)
+        
             batch_size, seq_len_r, _ = emb_r.shape # shape: batch_size, seq_len, dim
             # First image segment (similar to sentence A in NSP) 
             segment_r = self.img_segment(torch.zeros((batch_size, seq_len_r), device = self.img_segment.weight.device, dtype = torch.int))

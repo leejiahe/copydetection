@@ -5,7 +5,7 @@ defaults:
   - datamodule: copydetect.yaml
   - model: mnist.yaml
   - callbacks: default.yaml
-  - logger: wadb.yaml
+  - logger: wandb.yaml
   - trainer: default.yaml
   - log_dir: default.yaml
   - experiment: null
