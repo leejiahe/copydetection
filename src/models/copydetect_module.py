@@ -2,6 +2,7 @@ from typing import Any, List, Optional
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from pytorch_lightning import LightningModule
 from torchmetrics import MaxMetric
 from torchmetrics.classification.accuracy import Accuracy
@@ -26,6 +27,7 @@ class CopyDetectModule(LightningModule):
         # Instantiate ViT encoder from pretrained model
         pretrained_model = ViTModel.from_pretrained(pretrained_arch)
         encoder = pretrained_model.encoder
+        self.patch_size = pretrained_model.config.patch_size
                 
         # Instantiate embedding, we use the pretrained ViT cls and position embedding
         embedding = CopyDetectEmbedding(config = pretrained_model.config,
@@ -67,7 +69,17 @@ class CopyDetectModule(LightningModule):
                 ) -> torch.Tensor:
         
         if img_q is not None:
-            return self.feature_extractor(img_r)
+            encoding = self.feature_extractor(img_r)
+            batch_size, hp, wp, dim = encoding.size()
+            h, w = hp/self.patch_size, wp/self.patch_size
+            cls, feats = encoding[:,0,:], encoding[:,1:,:] # Get the cls token and all the images features
+            
+            feats = feats.reshape(batch_size, h, w, dim).clamp(min = 1e-6).permute(0,3,1,2)
+            # GeM Pooling
+            feats = F.avg_pool2d(feats.pow(4), (h,w)).pow(1./4).reshape(batch_size, -1)
+            # Concatenate cls tokens with image patches to give local and global views of image
+            feature_vector = torch.cat((cls, feats), dim = 1)
+            return feature_vector
         else:
             embedding_rq = self.embedding(img_r, img_q)
             logits = self.simimagepred(embedding_rq)
@@ -133,6 +145,10 @@ class CopyDetectModule(LightningModule):
         acc = self.val_acc.compute()  # get val accuracy from current epoch
         self.val_acc_best.update(acc)
         self.log("val/acc_best", self.val_acc_best.compute(), on_epoch = True, prog_bar = True)
+        
+    def test_step(self, batch: Any, batch_idx: int):
+        feats = self.forward(batch) # Get feat
+        return feats
 
     def on_epoch_end(self):
         # Reset metrics at the end of every epoch

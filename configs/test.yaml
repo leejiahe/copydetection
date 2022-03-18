@@ -30,3 +30,5 @@ name: "default"
 
 # passing checkpoint path is necessary
 ckpt_path: ???
+
+final_ground_truth: ${data_dir}/final_ground_truth.csv
