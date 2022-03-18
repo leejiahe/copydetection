@@ -85,8 +85,8 @@ def test(config: DictConfig) -> None:
     
     #! Specify image size at config
     transform = transforms.Compose([transforms.ToTensor(),
-                                transforms.Resize((config.image_size, config.image_size)),
-                                transforms.Normalize(IMAGENET_MEAN, IMAGENET_SDEV)])
+                                    transforms.Resize((config.image_size, config.image_size)),
+                                    transforms.Normalize(IMAGENET_MEAN, IMAGENET_SDEV)])
     
     #! Check if test append output from different batches
     # Reference image embedding
@@ -129,7 +129,7 @@ def test(config: DictConfig) -> None:
     scores = trainer.test(model = model,
                           dataloaders = copydetect_dataloader,
                           ckpt_path = config.ckpt_path)
-    
+    #! Check this
     # Get scores into dataframe for evaluation
     matching_df = pd.DataFrame({"query_id": predictions_list[i][0],
                                 "reference_id": predictions_list[i][1],

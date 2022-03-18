@@ -31,4 +31,5 @@ name: "default"
 # passing checkpoint path is necessary
 ckpt_path: ???
 
+image_size: 224 # Can increase to 384
 final_ground_truth: ${data_dir}/final_ground_truth.csv

@@ -1,5 +1,6 @@
 from typing import Any, List, Optional
 
+import einops
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -68,15 +69,18 @@ class CopyDetectModule(LightningModule):
                 img_q: Optional[torch.Tensor] = None,
                 ) -> torch.Tensor:
         
-        if img_q is not None:
+        if img_q is None:
             encoding = self.feature_extractor(img_r)
-            batch_size, hp, wp, dim = encoding.size()
-            h, w = hp/self.patch_size, wp/self.patch_size
+            batch_size, num_ch, H, W, = img_r.size()
+            #dim = encoding.size(2) # batch_size, seq_len, dim 
+            h, w = int(H/self.patch_size), int(W/self.patch_size)
             cls, feats = encoding[:,0,:], encoding[:,1:,:] # Get the cls token and all the images features
             
-            feats = feats.reshape(batch_size, h, w, dim).clamp(min = 1e-6).permute(0,3,1,2)
+            #feats = feats.reshape(batch_size, h, w, dim).clamp(min = 1e-6).permute(0,3,1,2)
+            feats = einops.rearrange(feats, 'b (h w) d -> b d h w', h = h, w = w).clamp(min = 1e-6)
             # GeM Pooling
-            feats = F.avg_pool2d(feats.pow(4), (h,w)).pow(1./4).reshape(batch_size, -1)
+            feats = F.avg_pool2d(feats.pow(4), (h,w)).pow(1./4)
+            feats = einops.rearrange(feats, 'b d () () -> b d')
             # Concatenate cls tokens with image patches to give local and global views of image
             feature_vector = torch.cat((cls, feats), dim = 1)
             return feature_vector

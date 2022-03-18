@@ -90,6 +90,7 @@ class CopyDetectDataset(Dataset):
                  image_dir: str,
                  transform):
         self.image_files = get_image_file(image_dir)
+        self.image_files = self.image_files[0:100] #! For testing purpose
         self.transform = transform
         
     def __len__(self) -> int:
@@ -98,7 +99,8 @@ class CopyDetectDataset(Dataset):
     def __getitem__(self, index: int) -> torch.Tensor:
         image_path = self.image_files[index]
         image = Image.open(image_path)
-        return self.transform(image)
+        image_id = os.path.split(image_path)[-1]
+        return self.transform(image), image_id
    
 
     
