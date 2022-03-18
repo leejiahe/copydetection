@@ -20,7 +20,8 @@ IMAGENET_SDEV = [0.229, 0.224, 0.225]
 
 # Return all the image paths in a folder
 get_image_file = lambda image_dir: [os.path.join(image_dir, f) for f in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, f))]
-        
+get_image = lambda folder, index: Image.open(folder[index])
+    
 class CopyDetectPretrainDataset(Dataset):
     def __init__(self,
                  image_dir: str,
@@ -39,7 +40,7 @@ class CopyDetectPretrainDataset(Dataset):
     def __getitem__(self, index: int) -> List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
             image_path = self.image_files[index]
             image = Image.open(image_path)
-
+            
             imgs, aug_imgs, labels = [], [], []
             imgs = []
             for _ in range(self.n_crops):
@@ -74,7 +75,6 @@ class CopyDetectValDataset(Dataset):
                 self.val_data.append((ref_image, query_image, label))
         self.transform = transform
         
-        
     def __len__(self) -> int:
         return len(self.val_data)
     
@@ -89,7 +89,7 @@ class CopyDetectDataset(Dataset):
     def __init__(self,
                  image_dir: str,
                  transform):
-        self.image_files = [os.path.join(image_dir, f) for f in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, f))]
+        self.image_files = get_image_file(image_dir)
         self.transform = transform
         
     def __len__(self) -> int:
@@ -99,7 +99,8 @@ class CopyDetectDataset(Dataset):
         image_path = self.image_files[index]
         image = Image.open(image_path)
         return self.transform(image)
-    
+   
+
     
     
 @dataclass
@@ -207,14 +208,14 @@ class CopyDetectDataModule(LightningDataModule):
                           pin_memory = self.pin_memory,
                           shuffle = False)
             
-    def ref_dataloader(self) -> DataLoader:
+    def references_dataloader(self) -> DataLoader:
         return DataLoader(dataset = self.reference_dataset,
                           batch_size = self.batch_size,
                           num_workers = self.num_workers,
                           pin_memory = self.pin_memory,
                           shuffle = False)
         
-    def test_dataloader(self) -> DataLoader:
+    def final_queries_dataloader(self) -> DataLoader:
         return DataLoader(dataset = self.query_final_dataset,
                           batch_size = self.batch_size,
                           num_workers = self.num_workers,
