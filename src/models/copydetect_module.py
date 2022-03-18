@@ -28,6 +28,11 @@ class CopyDetectModule(LightningModule):
         # Instantiate ViT encoder from pretrained model
         pretrained_model = ViTModel.from_pretrained(pretrained_arch)
         encoder = pretrained_model.encoder
+        for name, child in encoder.layer.named_children():
+            if (int(name) < 9):
+                for params in child.parameters():
+                    params.requires_grad = False
+                    
         self.patch_size = pretrained_model.config.patch_size
                 
         # Instantiate embedding, we use the pretrained ViT cls and position embedding
@@ -64,31 +69,32 @@ class CopyDetectModule(LightningModule):
         # For logging best validation accuracy
         self.val_acc_best = MaxMetric()
 
-    def forward(self,
-                img_r: torch.Tensor,
-                img_q: Optional[torch.Tensor] = None,
-                ) -> torch.Tensor:
-        
-        if img_q is None:
-            encoding = self.feature_extractor(img_r)
-            batch_size, num_ch, H, W, = img_r.size()
-            #dim = encoding.size(2) # batch_size, seq_len, dim 
-            h, w = int(H/self.patch_size), int(W/self.patch_size)
-            cls, feats = encoding[:,0,:], encoding[:,1:,:] # Get the cls token and all the images features
+    def feature_extract(self, batch: Any) -> torch.Tensor:
+        # To extract feature vector
+        img_r, img_id = batch
+        encoding = self.feature_extractor(img_r)
+        batch_size, num_ch, H, W, = img_r.size()
+        #dim = encoding.size(2) # batch_size, seq_len, dim 
+        h, w = int(H/self.patch_size), int(W/self.patch_size)
+        cls, feats = encoding[:,0,:], encoding[:,1:,:] # Get the cls token and all the images features
             
-            #feats = feats.reshape(batch_size, h, w, dim).clamp(min = 1e-6).permute(0,3,1,2)
-            feats = einops.rearrange(feats, 'b (h w) d -> b d h w', h = h, w = w).clamp(min = 1e-6)
-            # GeM Pooling
-            feats = F.avg_pool2d(feats.pow(4), (h,w)).pow(1./4)
-            feats = einops.rearrange(feats, 'b d () () -> b d')
-            # Concatenate cls tokens with image patches to give local and global views of image
-            feature_vector = torch.cat((cls, feats), dim = 1)
-            return feature_vector
-        else:
-            embedding_rq = self.embedding(img_r, img_q)
-            logits = self.simimagepred(embedding_rq)
-            preds = torch.argmax(logits, dim = 1)
-            return preds
+        #feats = feats.reshape(batch_size, h, w, dim).clamp(min = 1e-6).permute(0,3,1,2)
+        feats = einops.rearrange(feats, 'b (h w) d -> b d h w', h = h, w = w).clamp(min = 1e-6)
+        # GeM Pooling
+        feats = F.avg_pool2d(feats.pow(4), (h,w)).pow(1./4)
+        feats = einops.rearrange(feats, 'b d () () -> b d')
+        # Concatenate cls tokens with image patches to give local and global views of image
+        feature_vector = torch.cat((cls, feats), dim = 1)
+
+        return feature_vector, img_id
+        
+    def predict_copy(self, batch):
+        # For copy detection 
+        img_r, img_q = batch
+        embedding_rq = self.embedding(img_r, img_q)
+        logits = self.simimagepred(embedding_rq)
+        preds = torch.argmax(logits, dim = 1)
+        return preds
 
     def step(self,
              img_r: List[torch.Tensor],
@@ -98,13 +104,14 @@ class CopyDetectModule(LightningModule):
         # img_r, img_q to SimImagePredictor
         embedding_rq = self.embedding(img_r, img_q) ## nn sequential don't take multiple input
         logits = self.simimagepred(embedding_rq)
+        
         # Calculate binary cross entropy loss of similar image pair
-        simimage_loss = self.bce_loss(logits, label.unsqueeze(dim = 1))
+        simimage_loss = self.bce_loss(logits, label)
         # Predictions
         preds = torch.argmax(logits, dim = 1)
         
         # Get positive indices
-        pos_indices = label.bool()
+        pos_indices = label.squeeze().bool()
         # Forward positive indices of img_r and img_q to ContrastiveProjection
         proj_r = self.contrastiveproj(img_r[pos_indices])
         proj_q = self.contrastiveproj(img_q[pos_indices])
@@ -119,12 +126,12 @@ class CopyDetectModule(LightningModule):
 
     def training_step(self, batch: Any, batch_idx: int):
         img_r, img_q, label = batch
-        img_r, img_q, label = torch.vstack(img_r), torch.vstack(img_q), torch.hstack(label)
+        #img_r, img_q, label = torch.vstack(img_r), torch.vstack(img_q), torch.hstack(label)
 
         losses, preds = self.step(img_r, img_q, label)
         
         # Log train metrics
-        acc = self.train_acc(preds, label.int())
+        acc = self.train_acc(preds, label.squeeze().int())
         self.log("train/total_loss", losses['total'], on_step = True, on_epoch = True, prog_bar = False)
         self.log("train/simimage_loss", losses['simimage'], on_step = True, on_epoch = True, prog_bar = False)
         self.log("train/contrastive_loss", losses['contrastive'], on_step = True, on_epoch = True, prog_bar = False)
@@ -134,10 +141,10 @@ class CopyDetectModule(LightningModule):
 
     def validation_step(self, batch: Any, batch_idx: int):
         img_r, img_q, label = batch
-        losses, preds = self.step(img_r, img_q, label)
+        losses, preds = self.step(img_r, img_q, label.unsqueeze(dim = 1))
 
         # Log val metrics
-        acc = self.val_acc(preds, label.int())
+        acc = self.val_acc(preds, label.squeeze().int())
         self.log("val/total_loss", losses['total'], on_step = True, on_epoch = True, prog_bar = False)
         self.log("val/simimage_loss", losses['simimage'], on_step = True, on_epoch = True, prog_bar = False)
         self.log("val/contrastive_loss", losses['contrastive'], on_step = True, on_epoch = True, prog_bar = False)
@@ -151,9 +158,27 @@ class CopyDetectModule(LightningModule):
         self.log("val/acc_best", self.val_acc_best.compute(), on_epoch = True, prog_bar = True)
         
     def test_step(self, batch: Any, batch_idx: int):
-        feats = self.forward(batch) # Get feat
+        feats = self.feature_extract(batch) # Get feat
+        
         return feats
-
+    
+    def test_epoch_end(self, test_step_outputs: Any):
+        all_feats, all_ids = [], []
+        for step_output in test_step_outputs:
+            all_feats.append(step_output[0])
+            all_ids.extend(step_output[1])
+            
+        all_feats = torch.vstack(all_feats)
+        self.test_results = (all_feats, all_ids)
+        
+        return all_feats
+    
+    def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0):
+        self.test_results = None
+        score = self.predict_copy(batch)
+        
+        return score
+    
     def on_epoch_end(self):
         # Reset metrics at the end of every epoch
         self.train_acc.reset()

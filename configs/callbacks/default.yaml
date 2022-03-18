@@ -22,5 +22,5 @@ model_summary:
 rich_progress_bar:
   _target_: pytorch_lightning.callbacks.RichProgressBar
 
-device_stats_monitor:
-  _target_: pytorch.lightning.callbacks.DeviceStatsMonitor
+device_stats:
+  _target_: pytorch_lightning.callbacks.DeviceStatsMonitor

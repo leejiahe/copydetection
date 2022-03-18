@@ -29,7 +29,9 @@ class CopyDetectPretrainDataset(Dataset):
                  augment: object = None,
                  n_crops: Optional[int] = 1):
         
-        self.image_files = [os.path.join(image_dir, f) for f in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, f))]
+        self.image_files = np.array([os.path.join(image_dir, f) 
+                                     for f in os.listdir(image_dir) 
+                                     if os.path.isfile(os.path.join(image_dir, f))])
         self.augment = augment
         self.n_crops = n_crops
         self.transform = transform
@@ -42,7 +44,6 @@ class CopyDetectPretrainDataset(Dataset):
             image = Image.open(image_path)
             
             imgs, aug_imgs, labels = [], [], []
-            imgs = []
             for _ in range(self.n_crops):
                 aug_index = index
                 if random.random() > 0.5:
@@ -50,11 +51,11 @@ class CopyDetectPretrainDataset(Dataset):
                 label = torch.tensor(aug_index == index, dtype = torch.float) # label 1: modified copy: aug_index == index 
                 aug_image = Image.open(self.image_files[aug_index])
                 
-                imgs.append(self.transform(image))
-                aug_imgs.append(self.transform(self.augment(aug_image)))
+                imgs.append(self.transform(image).unsqueeze(dim = 0))
+                aug_imgs.append(self.transform(self.augment(aug_image)).unsqueeze(dim = 0))
                 labels.append(label)
         
-            return imgs, aug_imgs, labels
+            return torch.vstack(imgs), torch.vstack(aug_imgs), torch.hstack(labels)
 
 
         
@@ -90,7 +91,6 @@ class CopyDetectDataset(Dataset):
                  image_dir: str,
                  transform):
         self.image_files = get_image_file(image_dir)
-        self.image_files = self.image_files[:100]
         self.transform = transform
         
     def __len__(self) -> int:
@@ -100,7 +100,6 @@ class CopyDetectDataset(Dataset):
         image_path = self.image_files[index]
         image = Image.open(image_path)
         image_id = os.path.split(image_path)[-1]
-        #return self.transform(image)
         return self.transform(image), image_id
    
 

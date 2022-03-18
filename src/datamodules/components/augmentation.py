@@ -20,7 +20,7 @@ randomRGB = lambda: (random.randint(0, 255), random.randint(0, 255), random.rand
 
 letters = string.ascii_letters + string.digits + string.punctuation
 letters = [letter for letter in letters]
-randomText = lambda: (''.join(random.sample(letters, k = random.randint(3, 10))))
+randomText = lambda: (''.join(random.sample(letters, k = random.randint(3, 6))))
 
 class N_Compositions(BaseComposition):
     def __init__(self,
@@ -117,17 +117,21 @@ class MemeRandomFormat(imaugs.MemeFormat):
                         bboxes: Optional[List[Tuple]] = None,
                         bbox_format: Optional[str] = None,
                         ) -> Image.Image:
-
-        return F.meme_format(image,
-                             text = randomText(),
-                             font_file = random.choice(self.font_paths),
-                             opacity = random.uniform(0.5, 1),
-                             text_color = randomRGB(),
-                             caption_height = random.randint(50, 100),
-                             meme_bg_color = randomRGB(),
-                             metadata = metadata,
-                             bboxes = bboxes,
-                             bbox_format = bbox_format)
+        
+        # There is some bugs with the Augly library
+        try:
+            return F.meme_format(image,
+                                text = randomText(),
+                                font_file = random.choice(self.font_paths),
+                                opacity = random.uniform(0.5, 1),
+                                text_color = randomRGB(),
+                                caption_height = random.randint(50, 100),
+                                meme_bg_color = randomRGB(),
+                                metadata = metadata,
+                                bboxes = bboxes,
+                                bbox_format = bbox_format)
+        except:
+            return image
 
 
 class EncodingRandomQuality(imaugs.EncodingQuality):
@@ -414,10 +418,9 @@ class Augment:
                            RandomShufflePixels(),
                            OverlayOntoRandomScreenshot(),
                            RandomPadSquare(),
-                           ConvertRandomColor(),
-                           RandomCropping(),
+                           ConvertRandomColor(), #RandomCropping(),
                            imaugs.RandomAspectRatio(),
-                           imaugs.RandomPixelization(0, 0.7),
+                           imaugs.RandomPixelization(0.3, 0.7),
                            imaugs.RandomBlur(2, 10),
                            imaugs.RandomBrightness(0.1, 1),
                            imaugs.RandomRotation(-90, 90),

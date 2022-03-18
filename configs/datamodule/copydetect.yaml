@@ -8,10 +8,10 @@ dev_queries_dir: ${data_dir}/dev_queries/
 final_queries_dir:  ${data_dir}/final_queries/
 dev_validation_set: ${data_dir}/dev_validation_set.csv
 dev_ground_truth: ${data_dir}/dev_ground_truth.csv
-batch_size: 64
+batch_size: 16
 num_workers: 10
 pin_memory: True
-n_crops: 4
+n_crops: 2
 image_size: 224
 
 augment:
