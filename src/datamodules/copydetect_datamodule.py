@@ -90,7 +90,7 @@ class CopyDetectDataset(Dataset):
                  image_dir: str,
                  transform):
         self.image_files = get_image_file(image_dir)
-        self.image_files = self.image_files[0:100] #! For testing purpose
+        self.image_files = self.image_files[:100]
         self.transform = transform
         
     def __len__(self) -> int:
@@ -100,6 +100,7 @@ class CopyDetectDataset(Dataset):
         image_path = self.image_files[index]
         image = Image.open(image_path)
         image_id = os.path.split(image_path)[-1]
+        #return self.transform(image)
         return self.transform(image), image_id
    
 

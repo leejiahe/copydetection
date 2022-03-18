@@ -17,6 +17,21 @@ def to_2tuple(x):
         return x
     return (x, x)
 
+def init_weights(module):
+    if isinstance(module, nn.Linear):
+        nn.init.kaiming_uniform_(module.weight.data)
+        if module.bias is not None:
+            module.bias.data.zero_()
+            
+    elif isinstance(module, nn.LayerNorm):
+        module.bias.data.zero_()
+        module.weight.data.fill_(1.0)
+        
+    elif isinstance(module, nn.Conv2d):
+        nn.init.kaiming_uniform_(module.weight.data, nonlinearity = 'relu')
+        if module.bias is not None:
+            module.bias.zero_()
+
 class PatchEmbeddings(nn.Module):
     # Based on timm implementation, which can be found here:
     # https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
@@ -47,6 +62,7 @@ class SimImagePred(nn.Module):
         self.project = nn.Sequential(nn.Linear(embedding_dim, embedding_dim),
                                      nn.ReLU(),
                                      nn.Linear(embedding_dim, 1))
+        self.apply(init_weights)
 
     def forward(self, emb_rq):
         cls = emb_rq[:, 0, :] # Only get the cls token
@@ -66,6 +82,7 @@ class ContrastiveProj(nn.Module):
                                    nn.BatchNorm1d(hidden_dim),
                                    nn.ReLU(),
                                    nn.Linear(hidden_dim, projected_dim, bias = False))
+        self.apply(init_weights)
 
     def forward(self, x: torch.Tensor):
         cls = x[:, 0, :] # Only get the vit cls token
