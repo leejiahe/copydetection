@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
+import torch.nn as nn
 from torch.utils.data import Dataset
 from torch.utils.data.dataloader import DataLoader
 from torchvision.transforms import transforms
@@ -24,42 +25,48 @@ get_image = lambda folder, index: Image.open(folder[index])
     
 class CopyDetectPretrainDataset(Dataset):
     def __init__(self,
-                 image_dir: str,
-                 transform,
-                 augment: object = None,
-                 n_crops: Optional[int] = 1):
+                 image_dir: str):
         
         self.image_files = np.array([os.path.join(image_dir, f) 
                                      for f in os.listdir(image_dir) 
                                      if os.path.isfile(os.path.join(image_dir, f))])
-        self.augment = augment
-        self.n_crops = n_crops
-        self.transform = transform
         
     def __len__(self) -> int:
         return len(self.image_files)
     
     def __getitem__(self, index: int):
-            image_path = self.image_files[index]
-            image = Image.open(image_path)
+            image = Image.open(self.image_files[index])
+            return image
+
+class CopyDetectCollateFn(nn.Module):
+    def __init__(self,
+                 transform,
+                 augment: object,
+                 n_crops: Optional[int] = 1):
+        super().__init__()
+        self.transform  = transform
+        self.augment = augment
+        self.n_crops = n_crops
+
+    def forward(self, batch):
+        batch_size = len(batch)
+        indices = np.arange(batch_size)
+        # Transform image in batch and give a dimension for batching
+        imgs = list(map(lambda x: self.transform(x).unsqueeze_(dim = 0), batch))
+        
+        all_imgs, all_aug, all_labels = [], [], []
+        for _ in range(self.n_crops):
+            rand_bool = np.random.uniform(size = batch_size) < 0.5
+            rand_indices = np.random.randint(0, batch_size, size = batch_size)
+            aug_indices = np.where(rand_bool, indices, rand_indices)
+            aug_imgs = list(map(lambda i: batch[i], aug_indices.tolist()))
+            aug_imgs = list(map(lambda x: self.transform(self.augment(x)).unsqueeze_(dim = 0), aug_imgs))
             
-            #imgs, aug_imgs, labels = [], [], []
-            cropped = []
-            for _ in range(self.n_crops):
-                aug_index = index
-                if random.random() > 0.5:
-                    aug_index = random.randint(0, len(self.image_files)) # Get random image file
-                label = torch.tensor(aug_index == index, dtype = torch.float) # label 1: modified copy: aug_index == index 
-                aug_image = Image.open(self.image_files[aug_index])
-                
-                #imgs.append(self.transform(image).unsqueeze(dim = 0))
-                #aug_imgs.append(self.transform(self.augment(aug_image)).unsqueeze(dim = 0))
-                #labels.append(label)
-                cropped.append((self.transform(image), self.transform(self.augment(aug_image)), label))
-            return torch.hstack(cropped)
-            #return torch.vstack(imgs), torch.vstack(aug_imgs), torch.hstack(labels)
+            label = torch.tensor(indices == aug_indices, dtype = torch.float) # label 1: modified copy: aug_index == index 
 
-
+            all_imgs.extend(imgs), all_aug.extend(aug_imgs), all_labels.extend(label)
+            
+        return torch.vstack(all_imgs), torch.vstack(all_aug), torch.hstack(all_labels)
         
 class CopyDetectValDataset(Dataset):
     def __init__(self,
@@ -68,14 +75,15 @@ class CopyDetectValDataset(Dataset):
                  dev_validation_set: str,
                  transform):
         
-        self.val_data = []
+        val_data = []
         with open(dev_validation_set, 'r') as csvfile:
             csvreader = csv.reader(csvfile, delimiter = ',')
             for row in csvreader:
                 ref_image = os.path.join(references_dir, row[0])
                 query_image = os.path.join(queries_dir, row[1])
                 label = int(row[2])
-                self.val_data.append((ref_image, query_image, label))
+                val_data.append((ref_image, query_image, label))
+        self.val_data = np.array(val_data)
         self.transform = transform
         
     def __len__(self) -> int:
@@ -92,7 +100,7 @@ class CopyDetectDataset(Dataset):
     def __init__(self,
                  image_dir: str,
                  transform):
-        self.image_files = get_image_file(image_dir)
+        self.image_files = np.array(get_image_file(image_dir))
         self.transform = transform
         
     def __len__(self) -> int:
@@ -180,10 +188,11 @@ class CopyDetectDataModule(LightningDataModule):
                                         transforms.Resize((self.image_size, self.image_size)),
                                         transforms.Normalize(IMAGENET_MEAN, IMAGENET_SDEV)])
         
-        self.train_dataset = CopyDetectPretrainDataset(image_dir = self.train_dir,
-                                                       transform = transform,
-                                                       augment = self.augment,
-                                                       n_crops = self.n_crops)
+        self.collate_fn = CopyDetectCollateFn(transform = transform,
+                                              augment = self.augment,
+                                              n_crops = self.n_crops)
+                                                               
+        self.train_dataset = CopyDetectPretrainDataset(image_dir = self.train_dir)
         
         self.val_dataset = CopyDetectValDataset(dev_validation_set = self.dev_validation_set,
                                                 references_dir = self.references_dir,
@@ -202,6 +211,7 @@ class CopyDetectDataModule(LightningDataModule):
                           batch_size = self.batch_size,
                           num_workers = self.num_workers,
                           pin_memory = self.pin_memory,
+                          collate_fn = self.collate_fn,
                           shuffle = True,
                           drop_last = True)
 

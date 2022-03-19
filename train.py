@@ -1,4 +1,5 @@
 import dotenv
+import torch
 import hydra
 from omegaconf import DictConfig
 
@@ -18,7 +19,10 @@ def main(config: DictConfig):
 
     # Applies optional utilities
     utils.extras(config)
-
+    
+    with torch.cuda.device('cuda:0'):
+        torch.cuda.empty_cache()
+        
     # Train model
     return train(config)
 

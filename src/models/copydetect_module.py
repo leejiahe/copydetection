@@ -29,7 +29,7 @@ class CopyDetectModule(LightningModule):
         pretrained_model = ViTModel.from_pretrained(pretrained_arch)
         encoder = pretrained_model.encoder
         for name, child in encoder.layer.named_children():
-            if (int(name) < 9):
+            if (int(name) < 11):
                 for params in child.parameters():
                     params.requires_grad = False
                     
@@ -106,7 +106,7 @@ class CopyDetectModule(LightningModule):
         logits = self.simimagepred(embedding_rq)
         
         # Calculate binary cross entropy loss of similar image pair
-        simimage_loss = self.bce_loss(logits, label)
+        simimage_loss = self.bce_loss(logits, label.unsqueeze(dim = 1))
         # Predictions
         preds = torch.argmax(logits, dim = 1)
         
@@ -141,7 +141,7 @@ class CopyDetectModule(LightningModule):
 
     def validation_step(self, batch: Any, batch_idx: int):
         img_r, img_q, label = batch
-        losses, preds = self.step(img_r, img_q, label.unsqueeze(dim = 1))
+        losses, preds = self.step(img_r, img_q, label)
 
         # Log val metrics
         acc = self.val_acc(preds, label.squeeze().int())
