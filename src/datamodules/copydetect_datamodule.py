@@ -39,11 +39,12 @@ class CopyDetectPretrainDataset(Dataset):
     def __len__(self) -> int:
         return len(self.image_files)
     
-    def __getitem__(self, index: int) -> List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+    def __getitem__(self, index: int):
             image_path = self.image_files[index]
             image = Image.open(image_path)
             
-            imgs, aug_imgs, labels = [], [], []
+            #imgs, aug_imgs, labels = [], [], []
+            cropped = []
             for _ in range(self.n_crops):
                 aug_index = index
                 if random.random() > 0.5:
@@ -51,11 +52,12 @@ class CopyDetectPretrainDataset(Dataset):
                 label = torch.tensor(aug_index == index, dtype = torch.float) # label 1: modified copy: aug_index == index 
                 aug_image = Image.open(self.image_files[aug_index])
                 
-                imgs.append(self.transform(image).unsqueeze(dim = 0))
-                aug_imgs.append(self.transform(self.augment(aug_image)).unsqueeze(dim = 0))
-                labels.append(label)
-        
-            return torch.vstack(imgs), torch.vstack(aug_imgs), torch.hstack(labels)
+                #imgs.append(self.transform(image).unsqueeze(dim = 0))
+                #aug_imgs.append(self.transform(self.augment(aug_image)).unsqueeze(dim = 0))
+                #labels.append(label)
+                cropped.append((self.transform(image), self.transform(self.augment(aug_image)), label))
+            return torch.hstack(cropped)
+            #return torch.vstack(imgs), torch.vstack(aug_imgs), torch.hstack(labels)
 
 
         
