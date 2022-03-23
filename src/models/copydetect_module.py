@@ -12,6 +12,10 @@ from transformers import ViTModel
 
 from src.models.components.layers import CopyDetectEmbedding, NormalizedFeatures, SimImagePred, ContrastiveProj
 
+from src.utils import create_labels
+from pytorch_metric_learning.losses import NTXentLoss, CrossBatchMemory
+from pytorch_metric_learning.utils.distributed import DistributedLossWrapper
+
 class CopyDetectModule(LightningModule):
     def __init__(self,
                  pretrained_arch: str,          # Pretrained ViT architecture
@@ -27,38 +31,39 @@ class CopyDetectModule(LightningModule):
          
         # Instantiate ViT encoder from pretrained model
         pretrained_model = ViTModel.from_pretrained(pretrained_arch)
-        encoder = pretrained_model.encoder
-        for name, child in encoder.layer.named_children():
-            if (int(name) < 11):
-                for params in child.parameters():
-                    params.requires_grad = False
+        self.encoder = pretrained_model.encoder
+        #for name, child in encoder.layer.named_children():
+        #    if (int(name) < 11):
+        #        for params in child.parameters():
+        #            params.requires_grad = False
                     
         self.patch_size = pretrained_model.config.patch_size
                 
         # Instantiate embedding, we use the pretrained ViT cls and position embedding
-        embedding = CopyDetectEmbedding(config = pretrained_model.config,
-                                        vit_cls = pretrained_model.embeddings.cls_token,
-                                        pos_emb = pretrained_model.embeddings.position_embeddings)
+        self.embedding = CopyDetectEmbedding(config = pretrained_model.config,
+                                             vit_cls = pretrained_model.embeddings.cls_token,
+                                             pos_emb = pretrained_model.embeddings.position_embeddings)
         
         # Normalized features
-        normfeats = NormalizedFeatures(hidden_dim = pretrained_model.config.hidden_size,
-                                       layer_norm_eps = pretrained_model.config.layer_norm_eps)
-        # Feature Vector Extractor
-        self.feature_extractor = nn.Sequential(embedding, encoder, normfeats)
+        self.normfeats = NormalizedFeatures(hidden_dim = pretrained_model.config.hidden_size,
+                                            layer_norm_eps = pretrained_model.config.layer_norm_eps)
         
         # Instantiate SimImagePredictor
-        simimagepred = SimImagePred(embedding_dim = pretrained_model.config.hidden_size)
-        self.embedding = embedding
-        self.simimagepred = nn.Sequential(encoder, normfeats, simimagepred)
+        self.simimagepred = SimImagePred(embedding_dim = pretrained_model.config.hidden_size)
 
         # Instantiate ContrastiveProjection
-        contrastiveproj = ContrastiveProj(embedding_dim = pretrained_model.config.hidden_size,
-                                          hidden_dim = hidden_dim,
-                                          projected_dim = projected_dim)
-        self.contrastiveproj = nn.Sequential(embedding, encoder, normfeats, contrastiveproj)
+        self.contrastiveproj = ContrastiveProj(embedding_dim = pretrained_model.config.hidden_size,
+                                               hidden_dim = hidden_dim,
+                                               projected_dim = projected_dim)
         
         # Contrastive loss 
         self.contrastive_loss = ntxentloss
+        
+        # XBM
+        self.xbm_loss = DistributedLossWrapper(loss = CrossBatchMemory(loss = NTXentLoss(temperature = 0.9),
+                                                                       embedding_size = pretrained_model.config.hidden_size,
+                                                                       memory_size = 1024),
+                                               efficient = False)
         
         # Binary cross entropy loss for similar image pair
         self.bce_loss = torch.nn.BCEWithLogitsLoss()
@@ -72,7 +77,7 @@ class CopyDetectModule(LightningModule):
     def feature_extract(self, batch: Any) -> torch.Tensor:
         # To extract feature vector
         img_r, img_id = batch
-        encoding = self.feature_extractor(img_r)
+        encoding = self.normfeats(self.encoder(self.embedding(img_r)))
         batch_size, num_ch, H, W, = img_r.size()
         #dim = encoding.size(2) # batch_size, seq_len, dim 
         h, w = int(H/self.patch_size), int(W/self.patch_size)
@@ -90,9 +95,7 @@ class CopyDetectModule(LightningModule):
         
     def predict_copy(self, batch):
         # For copy detection 
-        img_r, img_q = batch
-        embedding_rq = self.embedding(img_r, img_q)
-        logits = self.simimagepred(embedding_rq)
+        logits = self.simimagepred(self.normfeats(self.encoder(self.embedding(batch))))
         preds = torch.argmax(logits, dim = 1)
         return preds
 
@@ -102,8 +105,7 @@ class CopyDetectModule(LightningModule):
              label: List[torch.Tensor]):
         
         # img_r, img_q to SimImagePredictor
-        embedding_rq = self.embedding(img_r, img_q) ## nn sequential don't take multiple input
-        logits = self.simimagepred(embedding_rq)
+        logits = self.simimagepred(self.normfeats(self.encoder(self.embedding(img_r, img_q)))) ## nn sequential don't take multiple input
         
         # Calculate binary cross entropy loss of similar image pair
         simimage_loss = self.bce_loss(logits, label.unsqueeze(dim = 1))
@@ -111,13 +113,19 @@ class CopyDetectModule(LightningModule):
         preds = torch.argmax(logits, dim = 1)
         
         # Get positive indices
-        pos_indices = label.squeeze().bool()
+        pos_indices = label.bool()
         # Forward positive indices of img_r and img_q to ContrastiveProjection
-        proj_r = self.contrastiveproj(img_r[pos_indices])
-        proj_q = self.contrastiveproj(img_q[pos_indices])
+        proj_r = self.contrastiveproj(self.normfeats(self.encoder(self.embedding(img_r[pos_indices]))))
+        proj_q = self.contrastiveproj(self.normfeats(self.encoder(self.embedding(img_q[pos_indices]))))
 
         # Calculate contrastive loss between un-augmented img_r and augmented positive pair of img_q
         contrastive_loss = self.contrastive_loss(proj_r, proj_q)
+        
+        #XBM
+        proj_rq = torch.cat((proj_r, proj_q), dim = 0)
+        previous_max_label = torch.max(self.xbm_loss.label_memory)
+        indices, enqueue_idx = create_labels(proj_r.size(0), previous_max_label, proj_rq.device)
+        xbm_loss = self.xbm_loss(proj_rq, indices, enqueue_idx = enqueue_idx)
         
         # Weighted sum of bce and contrastive loss
         total_loss = self.hparams.beta1 * simimage_loss + self.hparams.beta2 * contrastive_loss
@@ -126,12 +134,11 @@ class CopyDetectModule(LightningModule):
 
     def training_step(self, batch: Any, batch_idx: int):
         img_r, img_q, label = batch
-        #img_r, img_q, label = torch.vstack(img_r), torch.vstack(img_q), torch.hstack(label)
 
         losses, preds = self.step(img_r, img_q, label)
         
         # Log train metrics
-        acc = self.train_acc(preds, label.squeeze().int())
+        acc = self.train_acc(preds, label.int())
         self.log("train/total_loss", losses['total'], on_step = True, on_epoch = True, prog_bar = False)
         self.log("train/simimage_loss", losses['simimage'], on_step = True, on_epoch = True, prog_bar = False)
         self.log("train/contrastive_loss", losses['contrastive'], on_step = True, on_epoch = True, prog_bar = False)
@@ -144,7 +151,7 @@ class CopyDetectModule(LightningModule):
         losses, preds = self.step(img_r, img_q, label)
 
         # Log val metrics
-        acc = self.val_acc(preds, label.squeeze().int())
+        acc = self.val_acc(preds, label.int())
         self.log("val/total_loss", losses['total'], on_step = True, on_epoch = True, prog_bar = False)
         self.log("val/simimage_loss", losses['simimage'], on_step = True, on_epoch = True, prog_bar = False)
         self.log("val/contrastive_loss", losses['contrastive'], on_step = True, on_epoch = True, prog_bar = False)
@@ -169,12 +176,11 @@ class CopyDetectModule(LightningModule):
             all_ids.extend(step_output[1])
             
         all_feats = torch.vstack(all_feats)
-        self.test_results = (all_feats, all_ids)
+        #self.test_results = (all_feats, all_ids)
         
-        return all_feats
-    
+        return (all_feats, all_ids)
+        
     def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0):
-        self.test_results = None
         score = self.predict_copy(batch)
         
         return score

@@ -65,17 +65,19 @@ class OverlayRandomStripes(imaugs.OverlayStripes):
                         bboxes: Optional[List[Tuple]] = None,
                         bbox_format: Optional[str] = None,
                         ) -> Image.Image:
-        
-        return F.overlay_stripes(image,
-                                 line_width = random.uniform(0.1, 0.8),
-                                 line_color = randomRGB(),
-                                 line_angle = random.randrange(-90, 90),
-                                 line_density = random.uniform(0.5, 1),
-                                 line_type = random.choice(augly.utils.SUPPORTED_LINE_TYPES),
-                                 line_opacity = random.uniform(0.5, 1),
-                                 metadata = metadata,
-                                 bboxes = bboxes,
-                                 bbox_format = bbox_format)
+        try:
+            return F.overlay_stripes(image,
+                                     line_width = random.uniform(0.1, 0.8),
+                                     line_color = randomRGB(),
+                                     line_angle = random.randrange(-90, 90),
+                                     line_density = random.uniform(0.5, 1),
+                                     line_type = random.choice(augly.utils.SUPPORTED_LINE_TYPES),
+                                     line_opacity = random.uniform(0.5, 1),
+                                     metadata = metadata,
+                                     bboxes = bboxes,
+                                     bbox_format = bbox_format)
+        except:
+            return image
   
   
         
@@ -93,16 +95,18 @@ class OverlayRandomEmoji(imaugs.OverlayEmoji):
                         bboxes: Optional[List[Tuple]] = None,
                         bbox_format: Optional[str] = None,
                         ) -> Image.Image:
-        
-        return F.overlay_emoji(image,
-                               emoji_path = random.choice(self.emoji_paths),
-                               opacity = random.uniform(0.4, 1),
-                               emoji_size = random.uniform(0.4, 0.8),
-                               x_pos = random.uniform(0, 0.75),
-                               y_pos = random.uniform(0, 0.75),
-                               metadata = metadata,
-                               bboxes = bboxes,
-                               bbox_format = bbox_format)
+        try:
+            return F.overlay_emoji(image,
+                                   emoji_path = random.choice(self.emoji_paths),
+                                   opacity = random.uniform(0.4, 1),
+                                   emoji_size = random.uniform(0.4, 0.8),
+                                   x_pos = random.uniform(0, 0.75),
+                                   y_pos = random.uniform(0, 0.75),
+                                   metadata = metadata,
+                                   bboxes = bboxes,
+                                   bbox_format = bbox_format)
+        except:
+            return image
         
         
     
@@ -144,13 +148,14 @@ class EncodingRandomQuality(imaugs.EncodingQuality):
                         bboxes: Optional[List[Tuple]] = None,
                         bbox_format: Optional[str] = None,
                         ) -> Image.Image:
-
-        return F.encoding_quality(image,
-                                  quality = random.randrange(5, 50),
-                                  metadata = metadata,
-                                  bboxes = bboxes,
-                                  bbox_format = bbox_format)
-        
+        try:
+            return F.encoding_quality(image,
+                                      quality = random.randrange(5, 50),
+                                      metadata = metadata,
+                                      bboxes = bboxes,
+                                      bbox_format = bbox_format)
+        except:
+            return image
         
         
 class OverlayRandomText(imaugs.OverlayText):
@@ -166,18 +171,20 @@ class OverlayRandomText(imaugs.OverlayText):
                         ) -> Image.Image:
         text_indices = [[random.randint(0, 1000) for _ in range(random.randint(5, 10))] for _ in range(random.randint(1, 3))]
         font_path = random.choice(self.font_paths)
-        
-        return F.overlay_text(image,
-                              text = text_indices,
-                              font_file = font_path,
-                              font_size = random.uniform(0.1, 0.4),
-                              opacity = random.uniform(0.5, 1),
-                              color = randomRGB(),
-                              x_pos = random.uniform(0, 0.6),
-                              y_pos = random.uniform(0, 0.6),
-                              metadata = metadata,
-                              bboxes = bboxes,
-                              bbox_format = bbox_format)
+        try:
+            return F.overlay_text(image,
+                                  text = text_indices,
+                                  font_file = font_path,
+                                  font_size = random.uniform(0.1, 0.4),
+                                  opacity = random.uniform(0.5, 1),
+                                  color = randomRGB(),
+                                  x_pos = random.uniform(0, 0.6),
+                                  y_pos = random.uniform(0, 0.6),
+                                  metadata = metadata,
+                                  bboxes = bboxes,
+                                  bbox_format = bbox_format)
+        except:
+            return image
         
         
         
@@ -191,12 +198,14 @@ class RandomSaturation(imaugs.Saturation):
                         bboxes: Optional[List[Tuple]] = None,
                         bbox_format: Optional[str] = None,
                         ) -> Image.Image:
-
-        return F.saturation(image,
-                            factor = random.uniform(2, 5),
-                            metadata = metadata,
-                            bboxes = bboxes,
-                            bbox_format = bbox_format)
+        try:
+            return F.saturation(image,
+                                factor = random.uniform(2, 5),
+                                metadata = metadata,
+                                bboxes = bboxes,
+                                bbox_format = bbox_format)
+        except:
+            return image
         
         
         
@@ -215,12 +224,14 @@ class ApplyRandomPILFilter(imaugs.ApplyPILFilter):
                         bboxes: Optional[List[Tuple]] = None,
                         bbox_format: Optional[str] = None,
                         ) -> Image.Image:
-
-        return F.apply_pil_filter(image,
-                                  filter_type = random.choice(self.filter_types),
-                                  metadata = metadata,
-                                  bboxes = bboxes,
-                                  bbox_format = bbox_format)
+        try:
+            return F.apply_pil_filter(image,
+                                      filter_type = random.choice(self.filter_types),
+                                      metadata = metadata,
+                                      bboxes = bboxes,
+                                      bbox_format = bbox_format)
+        except:
+            return image
         
         
 
@@ -230,24 +241,28 @@ class ApplyRandomPILFilter(imaugs.ApplyPILFilter):
 class OverlayOntoRandomBackgroundImage(imaugs.OverlayOntoBackgroundImage):
     def __init__(self, background_image_dir: str, p: float = 1.0,):
         super().__init__(p)
-        self.background_images = [os.path.join(background_image_dir, image_path) for image_path in os.listdir(background_image_dir)]
+        self.background_images = np.random.choice([os.path.join(background_image_dir, image_path)
+                                                   for image_path in os.listdir(background_image_dir)],
+                                                  size = 10000)
         
     def apply_transform(self, image: Image.Image,
                         metadata: Optional[List[Dict[str, Any]]] = None,
                         bboxes: Optional[List[Tuple]] = None,
                         bbox_format: Optional[str] = None,
                         ) -> Image.Image:
-
-        return F.overlay_onto_background_image(image,
-                                               background_image = Image.open(random.choice(self.background_images)),
-                                               opacity = random.uniform(0.8, 1),
-                                               overlay_size = random.uniform(0.3, 0.5),
-                                               x_pos = random.uniform(0, 0.4),
-                                               y_pos = random.uniform(0, 0.4),
-                                               scale_bg = False,
-                                               metadata = metadata,
-                                               bboxes = bboxes,
-                                               bbox_format = bbox_format)
+        try:
+            return F.overlay_onto_background_image(image,
+                                                background_image = Image.open(random.choice(self.background_images)),
+                                                opacity = random.uniform(0.8, 1),
+                                                overlay_size = random.uniform(0.3, 0.5),
+                                                x_pos = random.uniform(0, 0.4),
+                                                y_pos = random.uniform(0, 0.4),
+                                                scale_bg = False,
+                                                metadata = metadata,
+                                                bboxes = bboxes,
+                                                bbox_format = bbox_format)
+        except:
+            return image
 
 
 
@@ -255,7 +270,9 @@ class OverlayOntoRandomBackgroundImage(imaugs.OverlayOntoBackgroundImage):
 class OverlayOntoRandomForegroundImage(imaugs.OverlayOntoBackgroundImage):
     def __init__(self, foreground_image_dir: str, p: float = 1.0,):
         super().__init__(p)
-        self.foreground_images = [os.path.join(foreground_image_dir, image_path) for image_path in os.listdir(foreground_image_dir)]
+        self.foreground_images = np.random.choice([os.path.join(foreground_image_dir, image_path)
+                                                   for image_path in os.listdir(foreground_image_dir)],
+                                                  size = 10000)
         
     def apply_transform(self, image: Image.Image,
                         metadata: Optional[List[Dict[str, Any]]] = None,
@@ -285,13 +302,15 @@ class RandomShufflePixels(imaugs.ShufflePixels):
                         bboxes: Optional[List[Tuple]] = None,
                         bbox_format: Optional[str] = None,
                         ) -> Image.Image:
-
-        return F.shuffle_pixels(image,
-                                factor = random.uniform(0.1, 0.3),
-                                seed = SEED,
-                                metadata = metadata,
-                                bboxes = bboxes,
-                                bbox_format = bbox_format)
+        try:
+            return F.shuffle_pixels(image,
+                                    factor = random.uniform(0.1, 0.3),
+                                    seed = SEED,
+                                    metadata = metadata,
+                                    bboxes = bboxes,
+                                    bbox_format = bbox_format)
+        except:
+            return image
         
 
 class OverlayOntoRandomScreenshot(imaugs.OverlayOntoScreenshot):
@@ -308,15 +327,18 @@ class OverlayOntoRandomScreenshot(imaugs.OverlayOntoScreenshot):
                         ) -> Image.Image:
 
         template_filepath = [os.path.join(self.template_filepath, f) for f in os.listdir(self.template_filepath) if f.endswith(('png', 'jpg'))]
-        return F.overlay_onto_screenshot(image,
-                                         template_filepath = random.choice(template_filepath),
-                                         template_bboxes_filepath = self.template_bboxes_filepath,
-                                         max_image_size_pixels = None,
-                                         crop_src_to_fit = True,
-                                         resize_src_to_match_template = True,
-                                         metadata = metadata,
-                                         bboxes = bboxes,
-                                         bbox_format = bbox_format )
+        try:
+            return F.overlay_onto_screenshot(image,
+                                            template_filepath = random.choice(template_filepath),
+                                            template_bboxes_filepath = self.template_bboxes_filepath,
+                                            max_image_size_pixels = None,
+                                            crop_src_to_fit = True,
+                                            resize_src_to_match_template = True,
+                                            metadata = metadata,
+                                            bboxes = bboxes,
+                                            bbox_format = bbox_format )
+        except:
+            return image
         
         
         
@@ -330,12 +352,14 @@ class RandomPadSquare(imaugs.PadSquare):
                         bboxes: Optional[List[Tuple]] = None,
                         bbox_format: Optional[str] = None,
                         ) -> Image.Image:
-
-        return F.pad_square(image,
-                            color = randomRGB(),
-                            metadata = metadata,
-                            bboxes = bboxes,
-                            bbox_format = bbox_format)
+        try:
+            return F.pad_square(image,
+                                color = randomRGB(),
+                                metadata = metadata,
+                                bboxes = bboxes,
+                                bbox_format = bbox_format)
+        except:
+            return image
         
         
         
@@ -359,16 +383,18 @@ class ConvertRandomColor(imaugs.ConvertColor):
                         bboxes: Optional[List[Tuple]] = None,
                         bbox_format: Optional[str] = None,
                         ) -> Image.Image:
-        
-        return F.convert_color(image,
-                               mode = None,
-                               matrix = None,
-                               dither = None,
-                               palette = 0,
-                               colors = random.randint(0, 256),
-                               metadata = metadata,
-                               bboxes = bboxes,
-                               bbox_format = bbox_format)
+        try:
+            return F.convert_color(image,
+                                   mode = None,
+                                   matrix = None,
+                                   dither = None,
+                                   palette = 0,
+                                   colors = random.randint(0, 256),
+                                   metadata = metadata,
+                                   bboxes = bboxes,
+                                   bbox_format = bbox_format)
+        except:
+            return image
         
         
         
@@ -413,8 +439,7 @@ class Augment:
                            OverlayRandomText(),
                            RandomSaturation(),
                            ApplyRandomPILFilter(),
-                           OverlayOntoRandomBackgroundImage(overlay_image_dir),
-                           OverlayOntoRandomForegroundImage(overlay_image_dir),
+                           OverlayOntoRandomBackgroundImage(overlay_image_dir), #OverlayOntoRandomForegroundImage(overlay_image_dir),
                            RandomShufflePixels(),
                            OverlayOntoRandomScreenshot(),
                            RandomPadSquare(),
@@ -422,6 +447,14 @@ class Augment:
                            imaugs.RandomAspectRatio(),
                            imaugs.RandomPixelization(0.3, 0.7),
                            imaugs.RandomBlur(2, 10),
+                           imaugs.RandomBrightness(0.1, 1),
+                           imaugs.RandomRotation(-90, 90),
+                           imaugs.Grayscale(),
+                           imaugs.PerspectiveTransform(),
+                           imaugs.VFlip(),
+                           imaugs.HFlip()]
+        
+        transforms_list = [imaugs.RandomAspectRatio(),
                            imaugs.RandomBrightness(0.1, 1),
                            imaugs.RandomRotation(-90, 90),
                            imaugs.Grayscale(),
