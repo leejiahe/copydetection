@@ -1,11 +1,10 @@
 #Inspired from https://github.com/PyTorchLightning/lightning-bolts/blob/master/pl_bolts/models/self_supervised/simclr/simclr_module.py
 
-import math
 import torch
 
 class SyncFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, tensor):
+    def forward(ctx, tensor: torch.Tensor) -> torch.Tensor:
         ctx.batch_size = tensor.shape[0]
         gathered_tensor = [torch.zeros_like(tensor) for _ in range(torch.distributed.get_world_size())]
         
@@ -23,14 +22,11 @@ class SyncFunction(torch.autograd.Function):
         return grad_input[idx_from:idx_to]
 
 class NTXentLoss:
-    def __init__(self,
-                 temperature = 0.9,
-                 eps: float = 1e-5):
+    def __init__(self, temperature = 0.9, eps: float = 1e-5):
         self.temperature = temperature
         self.eps = eps
     
-    
-    def __call__(self, img_r, img_q, id_r, id_q):
+    def __call__(self, img_r, img_q, id_r, id_q) -> torch.Tensor:
         if torch.distributed.is_available() and torch.distributed.is_initialized():
             img_r_gathered = SyncFunction.apply(img_r)
             img_q_gathered = SyncFunction.apply(img_q)
@@ -54,14 +50,16 @@ class NTXentLoss:
         # Tile mask to same shape as logits
         mask = mask.repeat(2, 2) # From [batch_size, world_size x batch_size] to [2 x batch_size, 2 x world_size x batch_size]
         # Zero img_r and img_q to its own transposed term by making diagonal to 0 
-        mask.fill_diagonal_(0)
+        logits_mask = torch.ones_like(mask).fill_diagonal_(0)
+        mask = mask * logits_mask
         # Remove entries without corresponding img_q pair
         paired = mask.sum(dim = 1) > 0 
         mask = mask[paired]
         logits = logits[paired]
+        logits_mask = logits_mask[paired]
         
         # Log probability
-        exp_logits = torch.exp(logits) * mask # [2 x batch_size, 2 x world_size x batch_size]
+        exp_logits = torch.exp(logits) * logits_mask # [2 x batch_size, 2 x world_size x batch_size]
         log_prob = logits - torch.log(exp_logits.sum(dim = 1, keepdim = True)) # [2 x batch_size, 2 x world_size x batch_size]
         mask_log_prob = - (mask * log_prob).sum(dim = 1) / mask.sum(dim = 1) # [2 x batch_size, 1]
         

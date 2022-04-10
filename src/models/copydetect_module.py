@@ -15,10 +15,6 @@ from transformers import ViTModel
 
 from src.models.components.layers import CopyDetectEmbedding, NormalizedFeatures, SimImagePred, ContrastiveProj
 
-from src.utils import create_labels
-from pytorch_metric_learning.losses import NTXentLoss, CrossBatchMemory
-from pytorch_metric_learning.utils.distributed import DistributedLossWrapper
-
 class CopyDetectModule(LightningModule):
     def __init__(self,
                  pretrained_arch: str,          # Pretrained ViT architecture
