@@ -15,6 +15,10 @@ from transformers import ViTModel
 
 from src.models.components.layers import CopyDetectEmbedding, NormalizedFeatures, SimImagePred, ContrastiveProj
 
+from src.utils import create_labels
+from pytorch_metric_learning.losses import NTXentLoss, CrossBatchMemory
+from pytorch_metric_learning.utils.distributed import DistributedLossWrapper
+
 class CopyDetectModule(LightningModule):
     def __init__(self,
                  pretrained_arch: str,          # Pretrained ViT architecture
@@ -52,6 +56,12 @@ class CopyDetectModule(LightningModule):
         
         # Contrastive loss 
         self.contrastive_loss = ntxentloss
+        
+        # XBM
+        self.xbm_loss = DistributedLossWrapper(loss = CrossBatchMemory(loss = NTXentLoss(temperature = 0.9),
+                                                                       embedding_size = pretrained_model.config.hidden_size,
+                                                                       memory_size = 1024),
+                                               efficient = False)
         
         # Binary cross entropy loss for similar image pair
         self.bce_loss = torch.nn.BCEWithLogitsLoss()
@@ -104,6 +114,12 @@ class CopyDetectModule(LightningModule):
         proj_q = self.contrastiveproj(self.normfeats(self.encoder_checkpoint(self.embedding(img_q))))
         # Calculate contrastive loss between un-augmented img_r and augmented positive pair of img_q
         contrastive_loss = self.contrastive_loss(proj_r, proj_q, id_r, id_q)
+        
+        #XBM
+        proj_rq = torch.cat((proj_r, proj_q), dim = 0)
+        previous_max_label = torch.max(self.xbm_loss.label_memory)
+        indices, enqueue_idx = create_labels(proj_r.size(0), previous_max_label, proj_rq.device)
+        xbm_loss = self.xbm_loss(proj_rq, indices, enqueue_idx = enqueue_idx)
         
         # Weighted sum of bce and contrastive loss
         total_loss = self.hparams.beta1 * simimage_loss + self.hparams.beta2 * contrastive_loss

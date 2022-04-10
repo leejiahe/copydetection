@@ -4,6 +4,7 @@ from typing import List, Sequence, Tuple, Optional, Any
 import numpy as np
 import pandas as pd
 
+import torch
 import pytorch_lightning as pl
 import rich.syntax
 import rich.tree
@@ -317,3 +318,13 @@ def search_with_capped_res(xq: np.ndarray, xb: np.ndarray, num_results: int):
         lims, dis, ids = new_lims, new_dis, new_ids
 
     return lims, dis, ids
+
+def create_labels(num_pos_pairs, previous_max_label, mod_device):
+    # create labels that indicate what the positive pairs are
+    labels = torch.arange(0, num_pos_pairs)
+    labels = torch.cat((labels, labels), device = mod_device)
+    # add an offset so that the labels do not overlap with any labels in the memory queue
+    labels += previous_max_label + 1
+    # we want to enqueue the output of encK, which is the 2nd half of the batch
+    enqueue_idx = torch.arange(num_pos_pairs, num_pos_pairs * 2)
+    return labels, enqueue_idx
