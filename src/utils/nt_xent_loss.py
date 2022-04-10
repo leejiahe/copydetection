@@ -28,30 +28,43 @@ class NTXentLoss:
                  eps: float = 1e-5):
         self.temperature = temperature
         self.eps = eps
-        
-    def __call__(self, img_a, img_b):
-
+    
+    
+    def __call__(self, img_r, img_q, id_r, id_q):
         if torch.distributed.is_available() and torch.distributed.is_initialized():
-            out_1_dist = SyncFunction.apply(img_a)
-            out_2_dist = SyncFunction.apply(img_b)
+            img_r_gathered = SyncFunction.apply(img_r)
+            img_q_gathered = SyncFunction.apply(img_q)
+            id_q_gathered = SyncFunction.apply(id_q)
+            
         else:
-            out_1_dist = img_a
-            out_2_dist = img_b
+            img_r_gathered = img_r
+            img_q_gathered = img_q
+            id_q_gathered = id_q
 
-        out = torch.cat([img_a, img_b], dim = 0)
-        out_dist = torch.cat([out_1_dist, out_2_dist], dim = 0)
+        img_rq = torch.cat([img_r, img_q], dim = 0) # [2 x batch_size, dim]
+        img_rq_gathered = torch.cat([img_r_gathered, img_q_gathered], dim = 0) # [2 x world_size x batch_size, dim]
+        cov = torch.divide(torch.mm(img_rq, img_rq_gathered.t().contiguous()), self.temperature) # [2 x batch_size, 2 x world_size x batch_size]
+        
+        # for numerical stability
+        logits_max, _ = torch.max(img_rq, dim = 1, keepdim = True) # [2 x batch_size, 1]
+        logits = cov - logits_max.detach() # [2 x batch_size, 2 x world_size x batch_size]
+        
+        # mask: [batch_size, world_size x batch_size]
+        mask = torch.eq(id_r.unsqueeze(dim = 1), id_q_gathered.unsqueeze(dim = 1).t()).float()
+        # Tile mask to same shape as logits
+        mask = mask.repeat(2, 2) # From [batch_size, world_size x batch_size] to [2 x batch_size, 2 x world_size x batch_size]
+        # Zero img_r and img_q to its own transposed term by making diagonal to 0 
+        mask.fill_diagonal_(0)
+        # Remove entries without corresponding img_q pair
+        paired = mask.sum(dim = 1) > 0 
+        mask = mask[paired]
+        logits = logits[paired]
+        
+        # Log probability
+        exp_logits = torch.exp(logits) * mask # [2 x batch_size, 2 x world_size x batch_size]
+        log_prob = logits - torch.log(exp_logits.sum(dim = 1, keepdim = True)) # [2 x batch_size, 2 x world_size x batch_size]
+        mask_log_prob = - (mask * log_prob).sum(dim = 1) / mask.sum(dim = 1) # [2 x batch_size, 1]
+        
+        return mask_log_prob.mean()
 
-        cov = torch.mm(out, out_dist.t().contiguous())
-        sim = torch.exp(cov / self.temperature)
-        neg = sim.sum(dim = -1)
-
-        row_sub = torch.Tensor(neg.shape).fill_(math.e ** (1 / self.temperature)).to(neg.device)
-        neg = torch.clamp(neg - row_sub, min = self.eps) 
-
-        pos = torch.exp(torch.sum(img_a * img_b, dim = -1) / self.temperature)
-        pos = torch.cat([pos, pos], dim = 0)
-
-        loss = -torch.log(pos / (neg + self.eps)).mean()
-
-        return loss
 	

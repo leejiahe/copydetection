@@ -49,6 +49,7 @@ class N_Compositions(BaseComposition):
         rand_n = np.random.randint(self.n_lower, self.n_upper)
         np.random.shuffle(self.transforms)
         transforms = np.random.choice(self.transforms, size = rand_n, replace = False, p = self.transform_probs)
+
         for transform in transforms:
             image = transform(image, force = True, metadata = metadata, bboxes = bboxes, bbox_format = bbox_format)
         return image
@@ -109,7 +110,7 @@ class OverlayRandomEmoji(imaugs.OverlayEmoji):
 class MemeRandomFormat(imaugs.MemeFormat):
     def __init__(self, p: float = 1.0):
         super().__init__(p)
-        self.font_paths = [os.path.join(augly.utils.FONTS_DIR, f) for f in os.listdir(augly.utils.FONTS_DIR) if f.endswith('ttf')]
+        self.font_paths = [os.path.join(augly.utils.FONTS_DIR, f) for f in os.listdir(augly.utils.FONTS_DIR) if f.endswith('ttf') and not f.startswith('Noto')]
 
     def apply_transform(self,
                         image: Image.Image,
@@ -156,7 +157,7 @@ class EncodingRandomQuality(imaugs.EncodingQuality):
 class OverlayRandomText(imaugs.OverlayText):
     def __init__(self, p: float = 1.0):
         super().__init__(p)
-        self.font_paths = [os.path.join(augly.utils.FONTS_DIR, f) for f in os.listdir(augly.utils.FONTS_DIR) if f.endswith('ttf')]
+        self.font_paths = [os.path.join(augly.utils.FONTS_DIR, f) for f in os.listdir(augly.utils.FONTS_DIR) if f.endswith('ttf') and not f.startswith('Noto')]
         
     def apply_transform(self,
                         image: Image.Image,
@@ -166,19 +167,21 @@ class OverlayRandomText(imaugs.OverlayText):
                         ) -> Image.Image:
         text_indices = [[random.randint(0, 1000) for _ in range(random.randint(5, 10))] for _ in range(random.randint(1, 3))]
         font_path = random.choice(self.font_paths)
-        
-        return F.overlay_text(image,
-                              text = text_indices,
-                              font_file = font_path,
-                              font_size = random.uniform(0.1, 0.4),
-                              opacity = random.uniform(0.5, 1),
-                              color = randomRGB(),
-                              x_pos = random.uniform(0, 0.6),
-                              y_pos = random.uniform(0, 0.6),
-                              metadata = metadata,
-                              bboxes = bboxes,
-                              bbox_format = bbox_format)
-        
+        try:
+            return F.overlay_text(image,
+                                text = text_indices,
+                                font_file = font_path,
+                                font_size = random.uniform(0.1, 0.4),
+                                opacity = random.uniform(0.5, 1),
+                                color = randomRGB(),
+                                x_pos = random.uniform(0, 0.6),
+                                y_pos = random.uniform(0, 0.6),
+                                metadata = metadata,
+                                bboxes = bboxes,
+                                bbox_format = bbox_format)
+        except:
+            return image
+            
         
         
 class RandomSaturation(imaugs.Saturation):
@@ -231,6 +234,7 @@ class OverlayOntoRandomBackgroundImage(imaugs.OverlayOntoBackgroundImage):
     def __init__(self, background_image_dir: str, p: float = 1.0,):
         super().__init__(p)
         self.background_images = [os.path.join(background_image_dir, image_path) for image_path in os.listdir(background_image_dir)]
+        self.background_images = random.sample(self.background_images, k = 10000)
         
     def apply_transform(self, image: Image.Image,
                         metadata: Optional[List[Dict[str, Any]]] = None,
@@ -413,8 +417,7 @@ class Augment:
                            OverlayRandomText(),
                            RandomSaturation(),
                            ApplyRandomPILFilter(),
-                           OverlayOntoRandomBackgroundImage(overlay_image_dir),
-                           OverlayOntoRandomForegroundImage(overlay_image_dir),
+                           OverlayOntoRandomBackgroundImage(overlay_image_dir), #OverlayOntoRandomForegroundImage(overlay_image_dir),
                            RandomShufflePixels(),
                            OverlayOntoRandomScreenshot(),
                            RandomPadSquare(),
@@ -436,4 +439,14 @@ class Augment:
             return self.augment(image)
             
 
+get_path = lambda x: os.path.join(os.getcwd(),'data', x)
 
+def main():
+    img = Image.open(get_path('references/R011029.jpg'))
+    aug = Augment(get_path('references'), 6, 4)
+    for _ in range(1000):
+        
+        t = aug(img)
+        
+if __name__ == '__main__':
+    main()

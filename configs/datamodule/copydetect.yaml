@@ -1,17 +1,15 @@
-
 _target_: src.datamodules.copydetect_datamodule.CopyDetectDataModule
 
-#training_dir: ${data_dir}/training/
 train_dir: ${data_dir}/train/
 references_dir: ${data_dir}/references/
 dev_queries_dir: ${data_dir}/dev_queries/
 final_queries_dir:  ${data_dir}/final_queries/
 dev_validation_set: ${data_dir}/dev_validation_set.csv
 dev_ground_truth: ${data_dir}/dev_ground_truth.csv
-batch_size: 128
-num_workers: 20
+batch_size: 64
+num_workers: 24
 pin_memory: True
-n_crops: 4
+n_crops: 2
 image_size: 224
 
 augment:

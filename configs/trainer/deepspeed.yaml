@@ -1,7 +1,8 @@
 defaults:
   - default.yaml
 
-strategy: deepspeed_stage_2
+strategy: 'deepspeed_stage_2_offload'
 precision: 16
 sync_batchnorm: True
 accumulate_grad_batches: 8
+gradient_clip_val: 0.5

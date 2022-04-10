@@ -6,15 +6,13 @@ defaults:
   - model: copydetect.yaml
   - callbacks: default.yaml
   - logger: wandb.yaml
-  - trainer: default.yaml
+  - trainer: deepspeed.yaml
   - log_dir: default.yaml
   - experiment: null
   - debug: null
   - hparams_search: null
   - optional local: default.yaml
 
-  - override hydra/hydra_logging: colorlog
-  - override hydra/job_logging: colorlog
 
 original_work_dir: ${hydra:runtime.cwd}
 data_dir: ${original_work_dir}/data/

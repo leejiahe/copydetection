@@ -28,15 +28,31 @@ get_image_file = lambda image_dir: [os.path.join(image_dir, f) for f in os.listd
 get_image = lambda folder, index: Image.open(folder[index])
 get_file_ids = lambda x: [f for f in os.listdir(x)]
 
-class CopyDetectPredDataset(Dataset):
+class CopyDetectDataset(Dataset):
+    def __init__(self,
+                 image_dir: str,
+                 transform):
+        self.image_files = np.array(get_image_file(image_dir))
+        self.transform = transform
+        
+    def __len__(self) -> int:
+        return len(self.image_files)
+    
+    def __getitem__(self, index: int) -> torch.Tensor:
+        image_path = self.image_files[index]
+        image = Image.open(image_path)
+        image_id = os.path.split(image_path)[-1]
+        return self.transform(image), image_id
+
+class PredictedDataset(Dataset):
     def __init__(self,
                  predictions: list,
                  references_dir: str,
                  final_queries_dir: str,
                  transform):
         self.predictions = predictions
-        self.references_images = get_image_file(references_dir)
-        self.final_queries_images = get_image_file(final_queries_dir)
+        self.references_images = np.array(get_image_file(references_dir))
+        self.final_queries_images = np.array(get_image_file(final_queries_dir))
         self.transform = transform
         
     def __len__(self) -> int:
@@ -83,28 +99,48 @@ def test(config: DictConfig) -> None:
     log.info(f"Instantiating trainer <{config.trainer._target_}>")
     trainer: Trainer = hydra.utils.instantiate(config.trainer)
     
+    
+    
     #! Specify image size at config
     transform = transforms.Compose([transforms.ToTensor(),
                                     transforms.Resize((config.image_size, config.image_size)),
                                     transforms.Normalize(IMAGENET_MEAN, IMAGENET_SDEV)])
     
+    reference_dataset = CopyDetectDataset(config.references_dir, transform = transform)
+    final_queries_dataset = CopyDetectDataset(config.final_queries_dir, transform = transform)
+    
+    reference_dataloader = DataLoader(dataset           = reference_dataset,
+                                      batch_size        = config.batch_size,
+                                      num_workers       = config.num_workers,
+                                      pin_memory        = config.pin_memory,
+                                      shuffle           = False)
+    final_queries_dataloader = DataLoader(dataset       = final_queries_dataset,
+                                          batch_size    = config.batch_size,
+                                          num_workers   = config.num_workers,
+                                          pin_memory    = config.pin_memory,
+                                          shuffle       = False)
+    
     #! Check if test append output from different batches
     # Reference image embedding
     # Using the cls token and GeM pooled local patches, it gives a global and important local representations of the image
-    log.info("Extracting features for reference images")
-    references_feats = trainer.test(model = model,
-                                    dataloaders = datamodule.references_dataloader,
-                                    ckpt_path = config.ckpt_path)
-    references_feats = references_feats.detach().cpu().numpy()
-    references_id = get_file_ids(config.references_dir)
-    
-    # Final queries image embedding
-    log.info("Extracting features for final queries images")
-    final_queries_feats = trainer.test(model = model,
-                                       dataloaders = datamodule.final_queries_dataloader,
-                                       ckpt_path = config.ckpt_path)
-    final_queries_feats = final_queries_feats.detach().cpu().numpy()
-    final_queries_id = get_file_ids(config.final_queries_dir)
+
+    with torch.no_grad():
+        log.info("Extracting features for reference images")
+        references_feats, references_id = [], []
+        for ref_image, ref_id in reference_dataloader:
+            ref_feat = model.feature_extract(ref_image)
+            references_feats.append(ref_feat)
+            references_id.append(ref_id)
+            
+        references_feats = torch.vstack(references_feats).detach().cpu().numpy()
+        
+        final_queries_feats, final_queries_id = [], []
+        for query_image, query_id in final_queries_dataloader:
+            query_feat = model.feature_extract(query_image)
+            final_queries_feats.append(query_feat)
+            final_queries_id.append(query_id)
+            
+        final_queries_feat = torch.vstack(final_queries_feat).detach().cpu().numpy()
     
     # Search for closest references image from queries image
     nq = len(final_queries_feats)
@@ -115,20 +151,23 @@ def test(config: DictConfig) -> None:
         for j in range(lims[i], lims[i+1]):
             predictions_list.append([final_queries_id[i], references_id[ids[j]]])
             
-    copydetectpred = CopyDetectPredDataset(predictions = predictions_list,
-                                           references_dir = config.references_dir,
-                                           final_queries_dir = config.final_queries_dir,
-                                           transform = transform)
+    predicted_dataset = PredictedDataset(predictions       = predictions_list,
+                                         references_dir    = config.references_dir,
+                                         final_queries_dir = config.final_queries_dir,
+                                         transform         = transform)
     
-    copydetect_dataloader = DataLoader(dataset = copydetectpred,
-                                       batch_size = config.batch_size,
-                                       num_workers = config.num_workers,
-                                       pin_memory = config.pin_memory)
+    predicted_dataloader = DataLoader(dataset      = predicted_dataset,
+                                      batch_size   = config.batch_size,
+                                      num_workers  = config.num_workers,
+                                      pin_memory   = config.pin_memory)
     # Get copy detection from model
     log.info("Testing model on final queries and references image to get similar image score")
-    scores = trainer.test(model = model,
-                          dataloaders = copydetect_dataloader,
-                          ckpt_path = config.ckpt_path)
+    scores = []
+    with torch.no_grad():
+        for ref_image, query_image in predicted_dataloader:
+            score = model.simimage(ref_image, query_image)
+            scores.append(score)
+    scores = torch.vstack(scores).detach().cpu().numpy()
     #! Check this
     # Get scores into dataframe for evaluation
     matching_df = pd.DataFrame({"query_id": predictions_list[i][0],

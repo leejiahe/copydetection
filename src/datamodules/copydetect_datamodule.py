@@ -1,5 +1,5 @@
 import os
-import random
+import re
 import csv
 import numpy as np
 from PIL import Image
@@ -26,17 +26,17 @@ get_image = lambda folder, index: Image.open(folder[index])
 class CopyDetectPretrainDataset(Dataset):
     def __init__(self,
                  image_dir: str):
-        
-        self.image_files = np.array([os.path.join(image_dir, f) 
-                                     for f in os.listdir(image_dir) 
-                                     if os.path.isfile(os.path.join(image_dir, f))])
+        self.image_dir = image_dir
+        self.image_files = np.array([f for f in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, f))])
         
     def __len__(self) -> int:
         return len(self.image_files)
     
     def __getitem__(self, index: int):
-            image = Image.open(self.image_files[index])
-            return image
+        image_id = self.image_files[index]
+        image = Image.open(os.path.join(self.image_dir, image_id))
+        image_id = re.findall(r'\d+', image_id)[0]
+        return (image, int(image_id))
 
 class CopyDetectCollateFn(nn.Module):
     def __init__(self,
@@ -51,22 +51,25 @@ class CopyDetectCollateFn(nn.Module):
     def forward(self, batch):
         batch_size = len(batch)
         indices = np.arange(batch_size)
-        # Transform image in batch and give a dimension for batching
-        imgs = list(map(lambda x: self.transform(x).unsqueeze_(dim = 0), batch))
         
-        all_imgs, all_aug, all_labels = [], [], []
+        imgs = [i[0] for i in batch]
+        ids  = [i[1] for i in batch]
+        # Transform image in batch and give a dimension for batching
+        ref_imgs = list(map(lambda x: self.transform(x).unsqueeze_(dim = 0), imgs))
+        
+        ref_imgs_list, aug_imgs_list, ref_ids_list, aug_ids_list = [], [], [], []
+        
         for _ in range(self.n_crops):
             rand_bool = np.random.uniform(size = batch_size) < 0.5
             rand_indices = np.random.randint(0, batch_size, size = batch_size)
             aug_indices = np.where(rand_bool, indices, rand_indices)
-            aug_imgs = list(map(lambda i: batch[i], aug_indices.tolist()))
+            aug_imgs = list(map(lambda i: imgs[i], aug_indices.tolist()))
             aug_imgs = list(map(lambda x: self.transform(self.augment(x)).unsqueeze_(dim = 0), aug_imgs))
+            aug_ids = list(map(lambda i: ids[i], aug_indices.tolist()))
             
-            label = torch.tensor(indices == aug_indices, dtype = torch.float) # label 1: modified copy: aug_index == index 
-
-            all_imgs.extend(imgs), all_aug.extend(aug_imgs), all_labels.extend(label)
+            ref_imgs_list.extend(ref_imgs), aug_imgs_list.extend(aug_imgs), ref_ids_list.extend(ids), aug_ids_list.extend(aug_ids)
             
-        return torch.vstack(all_imgs), torch.vstack(all_aug), torch.hstack(all_labels)
+        return torch.vstack(ref_imgs_list), torch.vstack(aug_imgs_list), torch.tensor(ref_ids_list), torch.tensor(aug_ids_list)
         
 class CopyDetectValDataset(Dataset):
     def __init__(self,
@@ -75,42 +78,30 @@ class CopyDetectValDataset(Dataset):
                  dev_validation_set: str,
                  transform):
         
+        self.refernces_dir = references_dir
+        self.queries_dir = queries_dir
+        self.transform = transform
+        
         val_data = []
         with open(dev_validation_set, 'r') as csvfile:
             csvreader = csv.reader(csvfile, delimiter = ',')
             for row in csvreader:
-                ref_image = os.path.join(references_dir, row[0])
-                query_image = os.path.join(queries_dir, row[1])
-                label = int(row[2])
-                val_data.append((ref_image, query_image, label))
+                val_data.append((row[0], row[1], row[2]))
+                                
         self.val_data = np.array(val_data)
-        self.transform = transform
-        
+
     def __len__(self) -> int:
         return len(self.val_data)
     
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        ref_image_path, query_image_path, label = self.val_data[index]
-        ref_image, query_image = Image.open(ref_image_path), Image.open(query_image_path)
-        return (self.transform(ref_image), self.transform(query_image), torch.tensor(label, dtype = torch.float))
-
-
-
-class CopyDetectDataset(Dataset):
-    def __init__(self,
-                 image_dir: str,
-                 transform):
-        self.image_files = np.array(get_image_file(image_dir))
-        self.transform = transform
+    def __getitem__(self, index: int):
+        ref_id, query_id, label = self.val_data[index]
+        ref_image = Image.open(os.path.join(self.refernces_dir, ref_id))
+        query_image = Image.open(os.path.join(self.queries_dir, query_id))
         
-    def __len__(self) -> int:
-        return len(self.image_files)
-    
-    def __getitem__(self, index: int) -> torch.Tensor:
-        image_path = self.image_files[index]
-        image = Image.open(image_path)
-        image_id = os.path.split(image_path)[-1]
-        return self.transform(image), image_id
+        return (self.transform(ref_image), self.transform(query_image), float(label))
+
+
+
    
 
     
@@ -199,11 +190,7 @@ class CopyDetectDataModule(LightningDataModule):
                                                 queries_dir = self.dev_queries_dir,
                                                 transform = transform)
         
-        self.reference_dataset = CopyDetectDataset(self.references_dir,
-                                                   transform = transform)
-    
-        self.query_final_dataset = CopyDetectDataset(self.final_queries_dir,
-                                                     transform = transform)
+
         
 
     def train_dataloader(self) -> DataLoader:
@@ -221,18 +208,5 @@ class CopyDetectDataModule(LightningDataModule):
                           num_workers = self.num_workers,
                           pin_memory = self.pin_memory,
                           shuffle = False)
-            
-    def references_dataloader(self) -> DataLoader:
-        return DataLoader(dataset = self.reference_dataset,
-                          batch_size = self.batch_size,
-                          num_workers = self.num_workers,
-                          pin_memory = self.pin_memory,
-                          shuffle = False)
-        
-    def final_queries_dataloader(self) -> DataLoader:
-        return DataLoader(dataset = self.query_final_dataset,
-                          batch_size = self.batch_size,
-                          num_workers = self.num_workers,
-                          pin_memory = self.pin_memory,
-                          shuffle = False)
+    
         

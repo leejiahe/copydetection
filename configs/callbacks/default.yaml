@@ -20,3 +20,8 @@ rich_progress_bar:
 
 device_stats:
   _target_: pytorch_lightning.callbacks.DeviceStatsMonitor
+
+stochastic_weight_averaging:
+  _target_: pytorch_lightning.callbacks.StochasticWeightAveraging
+  swa_epoch_start: 0.8 
+  swa_lrs: None

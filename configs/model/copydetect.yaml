@@ -1,9 +1,11 @@
 _target_: src.models.copydetect_module.CopyDetectModule
 pretrained_arch: 'google/vit-base-patch16-224'
 lr: 0.001
-weight_decay: 0.0005
-hidden_dim: 2048
-projected_dim: 512
+beta1: 0.9
+beta2: 0.999
+weight_decay: 0
+hidden_dim: 1024
+projected_dim: 256
 
 ntxentloss:
   _target_: src.utils.nt_xent_loss.NTXentLoss
