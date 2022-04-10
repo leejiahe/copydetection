@@ -1,0 +1,38 @@
+name: copydetect
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - cudatoolkit=11.3.1
+  - dataclasses
+  - faiss=1.7.2
+  - faiss-gpu=1.7.2
+  - ipykernel
+  - ipython
+  - matplotlib
+  - numpy
+  - opencv=4.5.5
+  - pillow=9.0.1
+  - python=3.9.10
+  - pytorch=1.11.0
+  - rich=10.16.2
+  - scipy
+  - pandas
+  - torchvision=0.12.0
+  - typing_extensions
+  - pip:
+    - augly
+    - deepspeed==0.6.1
+    - einops
+    - huggingface-hub
+    - hydra-core
+    - omegaconf
+    - pytorch-lightning>=1.6
+    - scikit-learn
+    - tensorboard
+    - torchmetrics
+    - transformers
+    - wandb
+    
+prefix: /home/stevenlee/miniconda3/envs/copydetect
