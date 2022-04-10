@@ -43,9 +43,6 @@ class N_Compositions(BaseComposition):
                  bbox_format: Optional[str] = None,
                  ) -> Image.Image:
         
-        if random.random() > self.p:
-            return image
-        
         rand_n = np.random.randint(self.n_lower, self.n_upper)
         np.random.shuffle(self.transforms)
         transforms = np.random.choice(self.transforms, size = rand_n, replace = False, p = self.transform_probs)
@@ -53,8 +50,6 @@ class N_Compositions(BaseComposition):
         for transform in transforms:
             image = transform(image, force = True, metadata = metadata, bboxes = bboxes, bbox_format = bbox_format)
         return image
-    
-    
     
 class OverlayRandomStripes(imaugs.OverlayStripes):
     def __init__(self, p: float = 1.0):
@@ -79,8 +74,6 @@ class OverlayRandomStripes(imaugs.OverlayStripes):
                                      bbox_format = bbox_format)
         except:
             return image
-  
-  
         
 class OverlayRandomEmoji(imaugs.OverlayEmoji):
     def __init__(self, p: float = 1.0,):
@@ -108,13 +101,11 @@ class OverlayRandomEmoji(imaugs.OverlayEmoji):
                                    bbox_format = bbox_format)
         except:
             return image
-        
-        
     
 class MemeRandomFormat(imaugs.MemeFormat):
     def __init__(self, p: float = 1.0):
         super().__init__(p)
-        self.font_paths = [os.path.join(augly.utils.FONTS_DIR, f) for f in os.listdir(augly.utils.FONTS_DIR) if f.endswith('ttf') and not f.startswith('Noto')]
+        self.font_paths = [os.path.join(augly.utils.FONTS_DIR, f) for f in os.listdir(augly.utils.FONTS_DIR) if f.endswith('ttf') and not f.startswith('Noto')] # There is error using the noto font library
 
     def apply_transform(self,
                         image: Image.Image,
@@ -123,7 +114,7 @@ class MemeRandomFormat(imaugs.MemeFormat):
                         bbox_format: Optional[str] = None,
                         ) -> Image.Image:
         
-        # There is some bugs with the Augly library
+        
         try:
             return F.meme_format(image,
                                 text = randomText(),
@@ -137,8 +128,7 @@ class MemeRandomFormat(imaugs.MemeFormat):
                                 bbox_format = bbox_format)
         except:
             return image
-
-
+        
 class EncodingRandomQuality(imaugs.EncodingQuality):
     def __init__(self, p: float = 1.0):
         super().__init__(p)
@@ -157,7 +147,6 @@ class EncodingRandomQuality(imaugs.EncodingQuality):
                                       bbox_format = bbox_format)
         except:
             return image
-        
         
 class OverlayRandomText(imaugs.OverlayText):
     def __init__(self, p: float = 1.0):
@@ -187,8 +176,6 @@ class OverlayRandomText(imaugs.OverlayText):
         except:
             return image
             
-        
-        
 class RandomSaturation(imaugs.Saturation):
     def __init__(self, p: float = 1.0):
         super().__init__(p)
@@ -207,8 +194,6 @@ class RandomSaturation(imaugs.Saturation):
                                 bbox_format = bbox_format)
         except:
             return image
-        
-        
         
 class ApplyRandomPILFilter(imaugs.ApplyPILFilter):
     def __init__(self, p: float = 1.0):
@@ -234,16 +219,11 @@ class ApplyRandomPILFilter(imaugs.ApplyPILFilter):
         except:
             return image
         
-        
-
-        
-        
-        
 class OverlayOntoRandomBackgroundImage(imaugs.OverlayOntoBackgroundImage):
     def __init__(self, background_image_dir: str, p: float = 1.0,):
         super().__init__(p)
         self.background_images = [os.path.join(background_image_dir, image_path) for image_path in os.listdir(background_image_dir)]
-        self.background_images = random.sample(self.background_images, k = 10000)
+        self.background_images = random.sample(self.background_images, k = 5000)
         
     def apply_transform(self, image: Image.Image,
                         metadata: Optional[List[Dict[str, Any]]] = None,
@@ -263,9 +243,6 @@ class OverlayOntoRandomBackgroundImage(imaugs.OverlayOntoBackgroundImage):
                                                 bbox_format = bbox_format)
         except:
             return image
-
-
-
 
 class OverlayOntoRandomForegroundImage(imaugs.OverlayOntoBackgroundImage):
     def __init__(self, foreground_image_dir: str, p: float = 1.0,):
@@ -291,7 +268,6 @@ class OverlayOntoRandomForegroundImage(imaugs.OverlayOntoBackgroundImage):
                                                bboxes = bboxes,
                                                bbox_format = bbox_format)
 
-
 class RandomShufflePixels(imaugs.ShufflePixels):
     def __init__(self, p: float = 1.0):
         super().__init__(p)
@@ -311,7 +287,6 @@ class RandomShufflePixels(imaugs.ShufflePixels):
                                     bbox_format = bbox_format)
         except:
             return image
-        
 
 class OverlayOntoRandomScreenshot(imaugs.OverlayOntoScreenshot):
     def __init__(self, p: float = 1.0):
@@ -340,8 +315,6 @@ class OverlayOntoRandomScreenshot(imaugs.OverlayOntoScreenshot):
         except:
             return image
         
-        
-        
 class RandomPadSquare(imaugs.PadSquare):
     def __init__(self, p: float = 1.0):
         super().__init__(p)
@@ -360,8 +333,6 @@ class RandomPadSquare(imaugs.PadSquare):
                                 bbox_format = bbox_format)
         except:
             return image
-        
-        
         
 class ConvertRandomColor(imaugs.ConvertColor):
     def __init__(self,
@@ -396,8 +367,6 @@ class ConvertRandomColor(imaugs.ConvertColor):
         except:
             return image
         
-        
-        
 class RandomCropping(imaugs.Crop):
     def __init__(self, p: float = 1.0):
         super().__init__(p)
@@ -413,16 +382,17 @@ class RandomCropping(imaugs.Crop):
         y1 = random.uniform(0, 0.4)
         x2 = x1 + random.uniform(0, 0.3)
         y2 = y1 + random.uniform(0, 0.3)
-        
-        return F.crop(image,
-                      x1 = x1,
-                      y1 = y1,
-                      x2 = x2,
-                      y2 = y2,
-                      metadata = metadata,
-                      bboxes = bboxes,
-                      bbox_format = bbox_format)
-
+        try:
+            return F.crop(image,
+                          x1 = x1,
+                          y1 = y1,
+                          x2 = x2,
+                          y2 = y2,
+                          metadata = metadata,
+                          bboxes = bboxes,
+                          bbox_format = bbox_format)
+        except:
+            return image
 
 class Augment:
     def __init__(self,
@@ -439,22 +409,15 @@ class Augment:
                            OverlayRandomText(),
                            RandomSaturation(),
                            ApplyRandomPILFilter(),
-                           OverlayOntoRandomBackgroundImage(overlay_image_dir), #OverlayOntoRandomForegroundImage(overlay_image_dir),
+                           OverlayOntoRandomBackgroundImage(overlay_image_dir),
                            RandomShufflePixels(),
                            OverlayOntoRandomScreenshot(),
                            RandomPadSquare(),
-                           ConvertRandomColor(), #RandomCropping(),
+                           ConvertRandomColor(),
+                           RandomCropping(),
                            imaugs.RandomAspectRatio(),
                            imaugs.RandomPixelization(0.3, 0.7),
                            imaugs.RandomBlur(2, 10),
-                           imaugs.RandomBrightness(0.1, 1),
-                           imaugs.RandomRotation(-90, 90),
-                           imaugs.Grayscale(),
-                           imaugs.PerspectiveTransform(),
-                           imaugs.VFlip(),
-                           imaugs.HFlip()]
-        
-        transforms_list = [imaugs.RandomAspectRatio(),
                            imaugs.RandomBrightness(0.1, 1),
                            imaugs.RandomRotation(-90, 90),
                            imaugs.Grayscale(),
@@ -467,16 +430,3 @@ class Augment:
     def __call__(self, image: Image.Image):
             assert(isinstance(image, Image.Image))
             return self.augment(image)
-            
-
-get_path = lambda x: os.path.join(os.getcwd(),'data', x)
-
-def main():
-    img = Image.open(get_path('references/R011029.jpg'))
-    aug = Augment(get_path('references'), 6, 4)
-    for _ in range(1000):
-        
-        t = aug(img)
-        
-if __name__ == '__main__':
-    main()

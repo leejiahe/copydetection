@@ -9,5 +9,5 @@ projected_dim: 256
 
 ntxentloss:
   _target_: src.utils.nt_xent_loss.NTXentLoss
-  temperature: 0.9
+  temperature: 0.1
   eps: 1e-5

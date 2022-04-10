@@ -24,18 +24,17 @@ get_image_file = lambda image_dir: [os.path.join(image_dir, f) for f in os.listd
 get_image = lambda folder, index: Image.open(folder[index])
     
 class CopyDetectPretrainDataset(Dataset):
-    def __init__(self,
-                 image_dir: str):
+    def __init__(self, image_dir: str):
         self.image_dir = image_dir
         self.image_files = np.array([f for f in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, f))])
         
     def __len__(self) -> int:
         return len(self.image_files)
     
-    def __getitem__(self, index: int):
+    def __getitem__(self, index: int) -> Tuple[Image.Image, int]:
         image_id = self.image_files[index]
         image = Image.open(os.path.join(self.image_dir, image_id))
-        image_id = re.findall(r'\d+', image_id)[0]
+        image_id = re.findall(r'\d+', image_id)[0] # Get file name
         return (image, int(image_id))
 
 class CopyDetectCollateFn(nn.Module):
@@ -48,7 +47,7 @@ class CopyDetectCollateFn(nn.Module):
         self.augment = augment
         self.n_crops = n_crops
 
-    def forward(self, batch):
+    def forward(self, batch: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         batch_size = len(batch)
         indices = np.arange(batch_size)
         
@@ -62,10 +61,13 @@ class CopyDetectCollateFn(nn.Module):
         for _ in range(self.n_crops):
             rand_bool = np.random.uniform(size = batch_size) < 0.5
             rand_indices = np.random.randint(0, batch_size, size = batch_size)
+            # If p > 0.5, augmented image is another image from the same batch
             aug_indices = np.where(rand_bool, indices, rand_indices)
+            # From the augmented indices, select the images and the image indices
             aug_imgs = list(map(lambda i: imgs[i], aug_indices.tolist()))
-            aug_imgs = list(map(lambda x: self.transform(self.augment(x)).unsqueeze_(dim = 0), aug_imgs))
             aug_ids = list(map(lambda i: ids[i], aug_indices.tolist()))
+            # Transform image in batch and give a dimension for batching
+            aug_imgs = list(map(lambda x: self.transform(self.augment(x)).unsqueeze_(dim = 0), aug_imgs))
             
             ref_imgs_list.extend(ref_imgs), aug_imgs_list.extend(aug_imgs), ref_ids_list.extend(ids), aug_ids_list.extend(aug_ids)
             
@@ -93,18 +95,12 @@ class CopyDetectValDataset(Dataset):
     def __len__(self) -> int:
         return len(self.val_data)
     
-    def __getitem__(self, index: int):
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor, float]:
         ref_id, query_id, label = self.val_data[index]
         ref_image = Image.open(os.path.join(self.refernces_dir, ref_id))
         query_image = Image.open(os.path.join(self.queries_dir, query_id))
         
         return (self.transform(ref_image), self.transform(query_image), float(label))
-
-
-
-   
-
-    
     
 @dataclass
 class CopyDetectDataModule(LightningDataModule):
@@ -114,7 +110,6 @@ class CopyDetectDataModule(LightningDataModule):
     final_queries_dir: str          # Final queries directory
     augment: object                 # Augmentation object from augment.py
     dev_validation_set: str = None  # Validation set created from dev ground truth, with randomly selected negative reference image pair  
-    dev_ground_truth: str = None    # Dev ground truth containing queries and corresponding reference pair
     batch_size: int = 128
     num_workers: int = 0
     pin_memory: bool = False
@@ -127,54 +122,8 @@ class CopyDetectDataModule(LightningDataModule):
         
     def prepare_data(self) -> None:
         pass
-        # Download data
-        """
-        urls_list = {'train_dir': [],
-                     'references_dir': [],
-                     'dev_queries_dir': [],
-                     'final_queries_dir': []}
-        
-        for d, urls in urls_list.item():
-            folder_dir = getattr(self, d)
-            for url in urls:
-                download_and_extract_archive(url, folder_dir)
-                
-                # move files
-                # delete zip file
-            # delete folder
-        
-        # Create validation set by using the ground truth csv, which contain query images and its corresponding reference images
-        # We create 'false' label by pairing query imge with a random reference image
-        # True label is query image with its corresponding reference image as given in the ground truth csv
-        
-        val_data = []
-        with open(self.dev_ground_truth) as csvfile:
-            csvreader = csv.reader(csvfile, delimiter = ',')
-            next(csvreader) # Skip header row
-            for row in csvreader: # Row return query_id, reference_id
-                if row[1] == '':
-                    continue # Filter row with reference id, ignoring all distractors images
-                else:
-                    query_image_path = os.path.join(self.hparams.dev_queries_dir, row[0])
-                    ref_image_path = os.path.join(self.hparams.references_dir, row[1])
-                    rand_image = row[1]
-                    while(rand_image == row[1]):
-                        rand_image = np.random.choice(self.hparams.references_dir) # pick one reference image randomly
-                    
-                    rand_image_path = os.path.join(self.hparams.references_dir, rand_image)
-                    val_data.append([ref_image_path, query_image_path, 1])
-                    val_data.append([rand_image_path, query_image_path, 0])
-        
-        folder_dir, _ = os.path.split(self.dev_ground_truth)
-        val_path = os.path.join(folder_dir, 'dev_validation_set.csv')
-        
-        with open(val_path, 'w') as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerows(val_data)
-        """
     
     def setup(self, stage: Optional[str] = None) -> None:
-        # load the data
         transform = transforms.Compose([transforms.ToTensor(),
                                         transforms.Resize((self.image_size, self.image_size)),
                                         transforms.Normalize(IMAGENET_MEAN, IMAGENET_SDEV)])
@@ -189,9 +138,6 @@ class CopyDetectDataModule(LightningDataModule):
                                                 references_dir = self.references_dir,
                                                 queries_dir = self.dev_queries_dir,
                                                 transform = transform)
-        
-
-        
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(dataset = self.train_dataset,
