@@ -21,10 +21,7 @@ class CopyDetectModule(LightningModule):
                  ntxentloss: object,            # Contrastive loss
                  hidden_dim: int = 2048,        # Contrastive projection size of hidden layer
                  projected_dim: int = 512,      # Contrastive projection size of projection head 
-                 beta1: int = 1,                # Similar image BCE loss multiplier
-                 beta2: int = 1,                # Contrastive loss multiplier
-                 lr: float = 0.001,
-                 weight_decay: float = 0.0005):               
+                 ):               
         super().__init__()
         self.save_hyperparameters(logger = False)
          
@@ -52,12 +49,6 @@ class CopyDetectModule(LightningModule):
         
         # Contrastive loss 
         self.contrastive_loss = ntxentloss
-        
-        # XBM
-        self.xbm_loss = DistributedLossWrapper(loss = CrossBatchMemory(loss = NTXentLoss(temperature = 0.9),
-                                                                       embedding_size = pretrained_model.config.hidden_size,
-                                                                       memory_size = 1024),
-                                               efficient = False)
         
         # Binary cross entropy loss for similar image pair
         self.bce_loss = torch.nn.BCEWithLogitsLoss()
@@ -88,7 +79,7 @@ class CopyDetectModule(LightningModule):
     def predict_copy(self, batch):
         # For copy detection 
         img_r, img_q = batch
-        logits = self.simimagepred(self.embedding(img_r, img_q))
+        logits = self.simimagepred(self.encoder_checkpoint(self.embedding(img_r, img_q)))
         preds = torch.argmax(logits, dim = 1)
         return preds
 
@@ -111,19 +102,14 @@ class CopyDetectModule(LightningModule):
         # Calculate contrastive loss between un-augmented img_r and augmented positive pair of img_q
         contrastive_loss = self.contrastive_loss(proj_r, proj_q, id_r, id_q)
         
-        #XBM
-        proj_rq = torch.cat((proj_r, proj_q), dim = 0)
-        previous_max_label = torch.max(self.xbm_loss.label_memory)
-        indices, enqueue_idx = create_labels(proj_r.size(0), previous_max_label, proj_rq.device)
-        xbm_loss = self.xbm_loss(proj_rq, indices, enqueue_idx = enqueue_idx)
-        
         # Weighted sum of bce and contrastive loss
-        total_loss = self.hparams.beta1 * simimage_loss + self.hparams.beta2 * contrastive_loss
+        total_loss = self.hparams.gamma1 * simimage_loss + self.hparams.gamma2 * contrastive_loss
         
         # Log train metrics
-        precision = self.train_precision(preds, label.squeeze().int())
+        precision = self.train_precision(preds, label.int())
         self.log("train/simimage_loss", simimage_loss, on_step = False, on_epoch = True, prog_bar = False)
         self.log("train/contrastive_loss", contrastive_loss, on_step = False, on_epoch = True, prog_bar = False)
+        self.log("train/total_loss", total_loss, on_step = False, on_epoch = True, prog_bar = False)
         self.log("train/precision", precision, on_step = False, on_epoch = True, prog_bar = True)
 
         return total_loss
@@ -138,7 +124,7 @@ class CopyDetectModule(LightningModule):
         preds = torch.argmax(logits, dim = 1)
 
         # Log val metrics
-        precision = self.val_precision(preds, label.squeeze().int())
+        precision = self.val_precision(preds, label.int())
         self.log("val/simimage_loss", simimage_loss, on_step = False, on_epoch = True, prog_bar = False)
         self.log("val/precision", precision, on_step = False, on_epoch = True, prog_bar = True)
     
@@ -149,11 +135,17 @@ class CopyDetectModule(LightningModule):
     
     def on_epoch_end(self):
         # Reset metrics at the end of every epoch
-        self.train_acc.reset()
-        self.val_acc.reset()
+        self.train_precision.reset()
+        self.val_precision.reset()
 
     def configure_optimizers(self):
-        return deepspeed.ops.adam.DeepSpeedCPUAdam(model_params = self.parameters(),
-                                                   lr = self.hparams.lr,
-                                                   betas = (self.hparams.beta1, self.hparams.beta2),
-                                                   weight_decay = self.hparams.weight_decay)
+        optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(model_params = self.parameters(),
+                                                        lr = self.hparams.lr,
+                                                        betas = (self.hparams.beta1, self.hparams.beta2),
+                                                        weight_decay = self.hparams.weight_decay)
+        scheduler = deepspeed.runtime.lr_schedules.WarmupDecayLR(optimizer,
+                                                                 warmup_min_lr = self.hparams.warmup_min_lr,
+                                                                 warmup_max_lr = self.hparams.lr,
+                                                                 warmup_num_steps = self.hparams.warmup_num_steps)
+        return ([optimizer], [scheduler])
+        
