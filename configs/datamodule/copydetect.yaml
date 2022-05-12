@@ -5,9 +5,8 @@ references_dir: ${data_dir}/references/
 dev_queries_dir: ${data_dir}/dev_queries/
 final_queries_dir:  ${data_dir}/final_queries/
 dev_validation_set: ${data_dir}/dev_validation_set.csv
-dev_ground_truth: ${data_dir}/dev_ground_truth.csv
-batch_size: 128
-num_workers: 24
+batch_size: 24
+num_workers: 12
 pin_memory: True
 n_crops: 2
 image_size: 224

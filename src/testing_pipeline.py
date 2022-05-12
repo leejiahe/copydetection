@@ -1,3 +1,4 @@
+from logging import raiseExceptions
 import os
 import json
 from pathlib import Path
@@ -81,12 +82,11 @@ def test(config: DictConfig) -> None:
         seed_everything(config.seed, workers=True)
 
     # Convert relative ckpt path to absolute path if necessary
+    if not os.path.exists(config.ckpt_path):
+        raise Exception
+    
     if not os.path.isabs(config.ckpt_path):
         config.ckpt_path = os.path.join(hydra.utils.get_original_cwd(), config.ckpt_path)
-
-    # Init lightning datamodule
-    log.info(f"Instantiating datamodule <{config.datamodule._target_}>")
-    datamodule: LightningDataModule = hydra.utils.instantiate(config.datamodule)
 
     # Init lightning model and load from checkpoint
     log.info(f"Instantiating model <{config.model._target_}>")
@@ -94,12 +94,6 @@ def test(config: DictConfig) -> None:
     # To eval mode
     model.eval()
     model.freeze()
-    
-    # Init lightning trainer
-    log.info(f"Instantiating trainer <{config.trainer._target_}>")
-    trainer: Trainer = hydra.utils.instantiate(config.trainer)
-    
-    
     
     #! Specify image size at config
     transform = transforms.Compose([transforms.ToTensor(),
@@ -134,6 +128,7 @@ def test(config: DictConfig) -> None:
             
         references_feats = torch.vstack(references_feats).detach().cpu().numpy()
         
+        log.info("Extracting features for queries images")
         final_queries_feats, final_queries_id = [], []
         for query_image, query_id in final_queries_dataloader:
             query_feat = model.feature_extract(query_image)

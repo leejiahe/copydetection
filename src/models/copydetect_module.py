@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from pytorch_lightning import LightningModule
 from torchmetrics import MaxMetric
 from torchmetrics.classification.precision_recall import Precision
+from timm.scheduler.cosine_lr import CosineLRScheduler
 
 from transformers import ViTModel
 
@@ -19,6 +20,16 @@ class CopyDetectModule(LightningModule):
     def __init__(self,
                  pretrained_arch: str,          # Pretrained ViT architecture
                  ntxentloss: object,            # Contrastive loss
+                 lr: float,                     # Learning rate
+                 gamma1: float = 1,             # SimImagePredictor loss multiplier
+                 gamma2: float = 1,             # Contrastive loss multiplier
+                 beta1: float = 0.9,            # beta1 term for Adam optimizer
+                 beta2: float = 0.999,          # beta2 term for Adam optimizer
+                 weight_decay: float  = 0,      # Weight decay for optimizer
+                 t_initial: int = 10,           # Initial number of epoch
+                 k_decay: float = 1,            # K Decay of learning rate
+                 warmup_t: int = 0,             # Number of warmup epoch
+                 warmup_lr_init: float = 0,     # Warmup learning rate
                  hidden_dim: int = 2048,        # Contrastive projection size of hidden layer
                  projected_dim: int = 512,      # Contrastive projection size of projection head 
                  ):               
@@ -28,6 +39,12 @@ class CopyDetectModule(LightningModule):
         # Instantiate ViT encoder from pretrained model
         pretrained_model = ViTModel.from_pretrained(pretrained_arch)
         self.encoder = pretrained_model.encoder
+        
+        #for parent in self.encoder.named_children():
+        #    for name, params in parent[1].named_children():
+        #        if int(name) < 6:
+        #            params.requires_grad_(False)
+                    
         self.patch_size = pretrained_model.config.patch_size
                 
         # Instantiate embedding, we use the pretrained ViT cls and position embedding
@@ -62,7 +79,7 @@ class CopyDetectModule(LightningModule):
     def feature_extract(self, batch: Any) -> torch.Tensor:
         # To extract feature vector
         img_r, img_id = batch
-        encoding = self.normfeats(self.encoder(self.embedding(img_r)))
+        encoding = self.norm_feats(self.encoder(self.embedding(img_r)))
         batch_size, num_ch, H, W, = img_r.size()
         h, w = int(H/self.patch_size), int(W/self.patch_size)
         cls, feats = encoding[:,0,:], encoding[:,1:,:] # Get the cls token and all the images features
@@ -83,22 +100,21 @@ class CopyDetectModule(LightningModule):
         preds = torch.argmax(logits, dim = 1)
         return preds
 
-    def encoder_checkpoint(self, emb: torch.Tensor) -> torch.Tensor:
-        return deepspeed.checkpointing.checkpoint(self.encoder, emb)
     
     def training_step(self, batch: Any, batch_idx: int):
         img_r, img_q, id_r, id_q = batch
         label = torch.tensor(id_r == id_q, dtype = torch.float, device = img_r.device)
         
         # SimImagePredictor
-        logits = self.simimagepred(self.normfeats(self.encoder_checkpoint(self.embedding(img_r, img_q))))
+        logits = self.simimagepred(self.normfeats(self.encoder(self.embedding(img_r, img_q))))
+
         # Calculate binary cross entropy loss of similar image pair
         simimage_loss = self.bce_loss(logits, label.unsqueeze(dim = 1))
         preds = torch.argmax(logits, dim = 1)
         
         # Contrastive loss
-        proj_r = self.contrastiveproj(self.normfeats(self.encoder_checkpoint(self.embedding(img_r))))
-        proj_q = self.contrastiveproj(self.normfeats(self.encoder_checkpoint(self.embedding(img_q))))
+        proj_r = self.contrastiveproj(self.normfeats(self.encoder(self.embedding(img_r))))
+        proj_q = self.contrastiveproj(self.normfeats(self.encoder(self.embedding(img_q))))
         # Calculate contrastive loss between un-augmented img_r and augmented positive pair of img_q
         contrastive_loss = self.contrastive_loss(proj_r, proj_q, id_r, id_q)
         
@@ -118,7 +134,7 @@ class CopyDetectModule(LightningModule):
         img_r, img_q, label = batch
         
         # SimImagePredictor
-        logits = self.simimagepred(self.normfeats(self.encoder_checkpoint(self.embedding(img_r, img_q))))
+        logits = self.simimagepred(self.normfeats(self.encoder(self.embedding(img_r, img_q))))
         # Calculate binary cross entropy loss of similar image pair
         simimage_loss = self.bce_loss(logits, label.unsqueeze(dim = 1))
         preds = torch.argmax(logits, dim = 1)
@@ -138,14 +154,22 @@ class CopyDetectModule(LightningModule):
         self.train_precision.reset()
         self.val_precision.reset()
 
+    def lr_scheduler_step(self, scheduler, optimizer_idx, metric) -> None:
+        scheduler.step(epoch = self.current_epoch)
+
     def configure_optimizers(self):
         optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(model_params = self.parameters(),
                                                         lr = self.hparams.lr,
                                                         betas = (self.hparams.beta1, self.hparams.beta2),
                                                         weight_decay = self.hparams.weight_decay)
-        scheduler = deepspeed.runtime.lr_schedules.WarmupDecayLR(optimizer,
-                                                                 warmup_min_lr = self.hparams.warmup_min_lr,
-                                                                 warmup_max_lr = self.hparams.lr,
-                                                                 warmup_num_steps = self.hparams.warmup_num_steps)
-        return ([optimizer], [scheduler])
+        
+        scheduler = CosineLRScheduler(optimizer,
+                                      t_initial = self.hparams.t_initial, 
+                                      lr_min = self.hparams.lr,
+                                      k_decay = self.hparams.k_decay,
+                                      warmup_t = self.hparams.warmup_t,
+                                      warmup_lr_init = self.hparams.warmup_lr_init,)
+
+        return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "epoch"}}
+
         

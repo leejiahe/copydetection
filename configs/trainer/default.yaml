@@ -1,10 +1,8 @@
 _target_: pytorch_lightning.Trainer
-
 accelerator: gpu
 devices: 4
 num_nodes: 1
 min_epochs: 1
-max_epochs: 30
+max_epochs: 40
 check_val_every_n_epoch: 1
 resume_from_checkpoint: null
-profiler: simple

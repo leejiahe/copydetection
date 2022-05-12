@@ -8,8 +8,10 @@ beta2: 0.999
 weight_decay: 0
 hidden_dim: 1024
 projected_dim: 256
-warmup_min_lr: 0.01
-warmup_num_steps: 10000
+t_initial: 5
+k_decay: 1
+warmup_t: 10
+warmup_lr_init: 0.01
 
 ntxentloss:
   _target_: src.utils.nt_xent_loss.NTXentLoss

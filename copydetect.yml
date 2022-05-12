@@ -23,7 +23,7 @@ dependencies:
   - typing_extensions
   - pip:
     - augly==1.0.0
-    - deepspeed==0.6.1
+    - deepspeed==0.5.8
     - einops
     - huggingface-hub
     - hydra-core
@@ -34,5 +34,6 @@ dependencies:
     - torchmetrics
     - transformers
     - wandb
+    - timm
     
 prefix: /home/stevenlee/miniconda3/envs/copydetect
