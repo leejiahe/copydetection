@@ -1,7 +1,6 @@
 from typing import Any, List, Optional
 
 import einops
-import deepspeed
 
 import torch
 import torch.nn as nn
@@ -10,7 +9,8 @@ import torch.nn.functional as F
 from pytorch_lightning import LightningModule
 from torchmetrics import MaxMetric
 from torchmetrics.classification.precision_recall import Precision
-from timm.scheduler.cosine_lr import CosineLRScheduler
+from fairscale.nn import checkpoint_wrapper, auto_wrap, wrap
+#from timm.scheduler.cosine_lr import CosineLRScheduler
 
 from transformers import ViTModel
 
@@ -75,6 +75,16 @@ class CopyDetectModule(LightningModule):
           
         # For logging best validation precision
         self.val_precision_best = MaxMetric()
+        
+    def configure_sharded_model(self):
+        # Module sharding for FSDP
+        
+        #self.embedding = wrap(self.embedding)
+        self.simimagepred = wrap(self.simimagepred)
+        self.contrastiveproj = wrap(self.contrastiveproj)
+        
+        self.encoder = auto_wrap(checkpoint_wrapper(self.encoder))
+        
 
     def feature_extract(self, batch: Any) -> torch.Tensor:
         # To extract feature vector
@@ -158,18 +168,23 @@ class CopyDetectModule(LightningModule):
         scheduler.step(epoch = self.current_epoch)
 
     def configure_optimizers(self):
-        optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(model_params = self.parameters(),
-                                                        lr = self.hparams.lr,
-                                                        betas = (self.hparams.beta1, self.hparams.beta2),
-                                                        weight_decay = self.hparams.weight_decay)
+        optimizer = torch.optim.AdamW(self.parameters(), lr = self.hparams.lr)
         
-        scheduler = CosineLRScheduler(optimizer,
-                                      t_initial = self.hparams.t_initial, 
-                                      lr_min = self.hparams.lr,
-                                      k_decay = self.hparams.k_decay,
-                                      warmup_t = self.hparams.warmup_t,
-                                      warmup_lr_init = self.hparams.warmup_lr_init,)
+        return optimizer
+        #optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(model_params = self.parameters(),
+        #                                                lr = self.hparams.lr,
+        #                                                betas = (self.hparams.beta1, self.hparams.beta2),
+        #                                                weight_decay = self.hparams.weight_decay)
+        
+        
+        
+        #scheduler = CosineLRScheduler(optimizer,
+        #                              t_initial = self.hparams.t_initial, 
+        #                              lr_min = self.hparams.lr,
+        #                              k_decay = self.hparams.k_decay,
+        #                              warmup_t = self.hparams.warmup_t,
+        #                              warmup_lr_init = self.hparams.warmup_lr_init,)
 
-        return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "epoch"}}
+        #return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "epoch"}}
 
         
