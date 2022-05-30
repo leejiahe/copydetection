@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from pytorch_lightning import LightningModule
 from torchmetrics import MaxMetric
 from torchmetrics.classification.precision_recall import Precision
-from fairscale.nn import checkpoint_wrapper, auto_wrap, wrap
+import deepspeed
 #from timm.scheduler.cosine_lr import CosineLRScheduler
 
 from transformers import ViTModel
@@ -40,11 +40,6 @@ class CopyDetectModule(LightningModule):
         pretrained_model = ViTModel.from_pretrained(pretrained_arch)
         self.encoder = pretrained_model.encoder
         
-        #for parent in self.encoder.named_children():
-        #    for name, params in parent[1].named_children():
-        #        if int(name) < 6:
-        #            params.requires_grad_(False)
-                    
         self.patch_size = pretrained_model.config.patch_size
                 
         # Instantiate embedding, we use the pretrained ViT cls and position embedding
@@ -75,16 +70,6 @@ class CopyDetectModule(LightningModule):
           
         # For logging best validation precision
         self.val_precision_best = MaxMetric()
-        
-    def configure_sharded_model(self):
-        # Module sharding for FSDP
-        
-        #self.embedding = wrap(self.embedding)
-        self.simimagepred = wrap(self.simimagepred)
-        self.contrastiveproj = wrap(self.contrastiveproj)
-        
-        self.encoder = auto_wrap(checkpoint_wrapper(self.encoder))
-        
 
     def feature_extract(self, batch: Any) -> torch.Tensor:
         # To extract feature vector
@@ -106,7 +91,7 @@ class CopyDetectModule(LightningModule):
     def predict_copy(self, batch):
         # For copy detection 
         img_r, img_q = batch
-        logits = self.simimagepred(self.encoder_checkpoint(self.embedding(img_r, img_q)))
+        logits = self.simimagepred(self.encoder(self.embedding(img_r, img_q)))
         preds = torch.argmax(logits, dim = 1)
         return preds
 
@@ -168,16 +153,13 @@ class CopyDetectModule(LightningModule):
         scheduler.step(epoch = self.current_epoch)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr = self.hparams.lr)
+        optimizer = deepspeed.ops.adam.FusedAdam(params = self.parameters(),
+                                                 lr = self.hparams.lr,
+                                                 betas = (self.hparams.beta1, self.hparams.beta2),
+                                                 weight_decay = self.hparams.weight_decay)
+        
         
         return optimizer
-        #optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(model_params = self.parameters(),
-        #                                                lr = self.hparams.lr,
-        #                                                betas = (self.hparams.beta1, self.hparams.beta2),
-        #                                                weight_decay = self.hparams.weight_decay)
-        
-        
-        
         #scheduler = CosineLRScheduler(optimizer,
         #                              t_initial = self.hparams.t_initial, 
         #                              lr_min = self.hparams.lr,
