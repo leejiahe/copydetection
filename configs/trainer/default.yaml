@@ -3,6 +3,6 @@ accelerator: gpu
 devices: 4
 num_nodes: 1
 min_epochs: 1
-max_epochs: 3
+max_epochs: 2
 check_val_every_n_epoch: 1
 resume_from_checkpoint: null
