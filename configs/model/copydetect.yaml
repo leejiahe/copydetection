@@ -1,6 +1,7 @@
 _target_: src.models.copydetect_module.CopyDetectModule
 pretrained_arch: 'google/vit-base-patch16-224'
-lr: 0.0002
+#lr: 0.0002
+lr: 0.0001
 gamma1: 1
 gamma2: 1
 beta1: 0.9

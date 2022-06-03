@@ -6,7 +6,7 @@ defaults:
   - model: copydetect.yaml
   - callbacks: default.yaml
   - logger: wandb.yaml
-  - trainer: deepspeed.yaml
+  - trainer: ddp.yaml
   - log_dir: default.yaml
   - experiment: null
   - debug: null

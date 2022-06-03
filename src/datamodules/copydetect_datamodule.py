@@ -138,7 +138,7 @@ class CopyDetectDataModule(LightningDataModule):
                                                 references_dir = self.references_dir,
                                                 queries_dir = self.dev_queries_dir,
                                                 transform = transform)
-
+    """
     def train_dataloader(self) -> DataLoader:
         return DataLoader(dataset = self.train_dataset,
                           batch_size = self.batch_size,
@@ -147,7 +147,15 @@ class CopyDetectDataModule(LightningDataModule):
                           collate_fn = self.collate_fn,
                           shuffle = True,
                           drop_last = True)
-
+    """
+    
+    def train_dataloader(self):
+        return DataLoader(dataset = self.val_dataset,
+                          batch_size = self.batch_size,
+                          num_workers = self.num_workers,
+                          pin_memory = self.pin_memory,
+                          shuffle = False)
+        
     def val_dataloader(self) -> DataLoader:
         return DataLoader(dataset = self.val_dataset,
                           batch_size = self.batch_size,

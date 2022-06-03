@@ -1,6 +1,7 @@
 from typing import Any, List, Optional
 
 import einops
+from grpc import access_token_call_credentials
 
 import torch
 import torch.nn as nn
@@ -8,7 +9,7 @@ import torch.nn.functional as F
 
 from pytorch_lightning import LightningModule
 from torchmetrics import MaxMetric
-from torchmetrics.classification.precision_recall import Precision
+from torchmetrics.classification import Accuracy
 import deepspeed
 #from timm.scheduler.cosine_lr import CosineLRScheduler
 
@@ -40,6 +41,12 @@ class CopyDetectModule(LightningModule):
         pretrained_model = ViTModel.from_pretrained(pretrained_arch)
         self.encoder = pretrained_model.encoder
         
+        for child in self.encoder.children():
+            for n, p in child.named_children():
+                if int(n) < 10:
+                    for params in p.named_parameters():
+                            params[1].requires_grad = False
+
         self.patch_size = pretrained_model.config.patch_size
                 
         # Instantiate embedding, we use the pretrained ViT cls and position embedding
@@ -55,21 +62,21 @@ class CopyDetectModule(LightningModule):
         self.simimagepred = SimImagePred(embedding_dim = pretrained_model.config.hidden_size)
 
         # Instantiate ContrastiveProjection
-        self.contrastiveproj = ContrastiveProj(embedding_dim = pretrained_model.config.hidden_size,
-                                               hidden_dim = hidden_dim,
-                                               projected_dim = projected_dim)
+        #self.contrastiveproj = ContrastiveProj(embedding_dim = pretrained_model.config.hidden_size,
+        #                                       hidden_dim = hidden_dim,
+        #                                       projected_dim = projected_dim)
         
         # Contrastive loss 
-        self.contrastive_loss = ntxentloss
+        #self.contrastive_loss = ntxentloss
         
         # Binary cross entropy loss for similar image pair
         self.bce_loss = torch.nn.BCEWithLogitsLoss()
         
         # Model precision in detecting modified copy
-        self.train_precision, self.val_precision = Precision(average = 'micro'), Precision(average = 'micro')   
+        self.train_acc, self.val_acc = Accuracy(), Accuracy()   
           
         # For logging best validation precision
-        self.val_precision_best = MaxMetric()
+        self.val_best = MaxMetric()
 
     def feature_extract(self, batch: Any) -> torch.Tensor:
         # To extract feature vector
@@ -97,60 +104,63 @@ class CopyDetectModule(LightningModule):
 
     
     def training_step(self, batch: Any, batch_idx: int):
+        """"
         img_r, img_q, id_r, id_q = batch
         label = torch.tensor(id_r == id_q, dtype = torch.float, device = img_r.device)
-        
+        """
+        img_r, img_q, label = batch
+        label = label.unsqueeze(dim = 1)
         # SimImagePredictor
         logits = self.simimagepred(self.normfeats(self.encoder(self.embedding(img_r, img_q))))
 
         # Calculate binary cross entropy loss of similar image pair
-        simimage_loss = self.bce_loss(logits, label.unsqueeze(dim = 1))
-        preds = torch.argmax(logits, dim = 1)
+        simimage_loss = self.bce_loss(logits, label)
+        #preds = torch.argmax(logits, dim = 1)
         
         # Contrastive loss
-        proj_r = self.contrastiveproj(self.normfeats(self.encoder(self.embedding(img_r))))
-        proj_q = self.contrastiveproj(self.normfeats(self.encoder(self.embedding(img_q))))
+        #proj_r = self.contrastiveproj(self.normfeats(self.encoder(self.embedding(img_r))))
+        #proj_q = self.contrastiveproj(self.normfeats(self.encoder(self.embedding(img_q))))
         # Calculate contrastive loss between un-augmented img_r and augmented positive pair of img_q
-        contrastive_loss = self.contrastive_loss(proj_r, proj_q, id_r, id_q)
+        #contrastive_loss = self.contrastive_loss(proj_r, proj_q, id_r, id_q)
         
         # Weighted sum of bce and contrastive loss
-        total_loss = self.hparams.gamma1 * simimage_loss + self.hparams.gamma2 * contrastive_loss
+        total_loss = self.hparams.gamma1 * simimage_loss #+ self.hparams.gamma2 * contrastive_loss
         
         # Log train metrics
-        precision = self.train_precision(preds, label.int())
+        acc = self.train_acc(logits, label.int())
         self.log("train/simimage_loss", simimage_loss, on_step = False, on_epoch = True, prog_bar = False)
-        self.log("train/contrastive_loss", contrastive_loss, on_step = False, on_epoch = True, prog_bar = False)
+        #self.log("train/contrastive_loss", contrastive_loss, on_step = False, on_epoch = True, prog_bar = False)
         self.log("train/total_loss", total_loss, on_step = False, on_epoch = True, prog_bar = False)
-        self.log("train/precision", precision, on_step = False, on_epoch = True, prog_bar = True)
+        self.log("train/acc", acc, on_step = False, on_epoch = True, prog_bar = True)
 
         return total_loss
 
     def validation_step(self, batch: Any, batch_idx: int):
         img_r, img_q, label = batch
-        
+        label = label.unsqueeze(dim = 1)
         # SimImagePredictor
         logits = self.simimagepred(self.normfeats(self.encoder(self.embedding(img_r, img_q))))
         # Calculate binary cross entropy loss of similar image pair
-        simimage_loss = self.bce_loss(logits, label.unsqueeze(dim = 1))
-        preds = torch.argmax(logits, dim = 1)
+        simimage_loss = self.bce_loss(logits, label)
+        #preds = torch.argmax(logits, dim = 1)
 
         # Log val metrics
-        precision = self.val_precision(preds, label.int())
+        acc = self.val_acc(logits, label.int())
         self.log("val/simimage_loss", simimage_loss, on_step = False, on_epoch = True, prog_bar = False)
-        self.log("val/precision", precision, on_step = False, on_epoch = True, prog_bar = True)
+        self.log("val/acc", acc, on_step = False, on_epoch = True, prog_bar = True)
     
     def validation_epoch_end(self, outputs: Any) -> None:
-        precision = self.val_precision.compute()
-        self.val_precision_best.update(precision)
-        self.log('val/precision_best', self.val_precision_best.compute(), on_epoch = True, prog_bar = True)
+        acc = self.val_acc.compute()
+        self.val_best.update(acc)
+        self.log('val/acc_best', self.val_best.compute(), on_epoch = True, prog_bar = True)
     
     def on_epoch_end(self):
         # Reset metrics at the end of every epoch
-        self.train_precision.reset()
-        self.val_precision.reset()
+        self.train_acc.reset()
+        self.val_acc.reset()
 
-    def lr_scheduler_step(self, scheduler, optimizer_idx, metric) -> None:
-        scheduler.step(epoch = self.current_epoch)
+    #def lr_scheduler_step(self, scheduler, optimizer_idx, metric) -> None:
+    #    scheduler.step(epoch = self.current_epoch)
 
     def configure_optimizers(self):
         optimizer = deepspeed.ops.adam.FusedAdam(params = self.parameters(),
@@ -158,8 +168,10 @@ class CopyDetectModule(LightningModule):
                                                  betas = (self.hparams.beta1, self.hparams.beta2),
                                                  weight_decay = self.hparams.weight_decay)
         
-        
+        optimizer = torch.optim.AdamW(params = self.parameters(),
+                                      lr = self.hparams.lr)
         return optimizer
+    
         #scheduler = CosineLRScheduler(optimizer,
         #                              t_initial = self.hparams.t_initial, 
         #                              lr_min = self.hparams.lr,

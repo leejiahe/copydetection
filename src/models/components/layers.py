@@ -59,9 +59,12 @@ class SimImagePred(nn.Module):
     def __init__(self,
                  embedding_dim: int = 768):
         super().__init__()
-        self.project = nn.Sequential(nn.Linear(embedding_dim, embedding_dim),
+        self.projec1 = nn.Sequential(nn.Linear(embedding_dim, embedding_dim),
                                      nn.ReLU(),
                                      nn.Linear(embedding_dim, 1))
+        self.projec2 = nn.Sequential(nn.Linear(embedding_dim, 1),
+                                     nn.Sigmoid())
+        self.project = nn.Linear(embedding_dim, 1)
         self.apply(init_weights)
 
     def forward(self, emb_rq):
@@ -135,7 +138,12 @@ class CopyDetectEmbedding(nn.Module):
             emb_q = self.patch_embeddings(img_q)
             emb_q = torch.cat((vit_cls, emb_q), dim = 1)
             emb_q = self.dropout(emb_q)
+            cls_token = self.cls_token.expand(batch_size, -1, -1)
             
+            emb_rq = torch.cat((cls_token, emb_r, emb_q), dim = 1)
+            return emb_rq
+            
+            """
             # First image segment (similar to sentence A in NSP) 
             segment_r = self.img_segment(torch.zeros((batch_size, emb_r.size(1)), device = self.img_segment.weight.device, dtype = torch.int))
             # Second image segment (similar to sentence B in NSP)
@@ -149,3 +157,4 @@ class CopyDetectEmbedding(nn.Module):
             # Concat cls, ref emb, sep, query emb
             emb_rq = torch.cat((cls_token, emb_seg_r, sep_token, emb_seg_q), dim = 1)
             return emb_rq
+            """
